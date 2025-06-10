@@ -604,8 +604,40 @@ const FitnessDashboard: React.FC = () => {
       isPersonal: true
     });
 
+    const addToGoogleCalendar = (event: CalendarEvent) => {
+      const timeStr = event.time || '';
+      let hours = 0;
+      let minutes = 0;
+      
+      const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (timeMatch) {
+        hours = parseInt(timeMatch[1]);
+        minutes = parseInt(timeMatch[2]);
+        const meridiem = timeMatch[3].toUpperCase();
+        
+        if (meridiem === 'PM' && hours < 12) hours += 12;
+        if (meridiem === 'AM' && hours === 12) hours = 0;
+      }
+      
+      const startDate = new Date(event.date);
+      startDate.setHours(hours, minutes, 0, 0);
+      
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+      
+      const params = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: event.title,
+        details: `Class Type: ${event.type}\nInstructor: ${event.instructor}\nLocation: RSF Berkeley`,
+        dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+        location: '2301 Bancroft Way, Berkeley, CA 94720'
+      });
+
+      window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+    };
+
     const handleAddEvent = () => {
       setPersonalEvents(prev => [...prev, newEvent]);
+      addToGoogleCalendar(newEvent);
       setShowAddModal(false);
     };
 
@@ -766,37 +798,6 @@ const FitnessDashboard: React.FC = () => {
         case 'DANCE': return '#e74c3c';
         default: return '#003262';
       }
-    };
-
-    const addToGoogleCalendar = (event: CalendarEvent) => {
-      const timeStr = event.time || '';
-      let hours = 0;
-      let minutes = 0;
-      
-      const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-      if (timeMatch) {
-        hours = parseInt(timeMatch[1]);
-        minutes = parseInt(timeMatch[2]);
-        const meridiem = timeMatch[3].toUpperCase();
-        
-        if (meridiem === 'PM' && hours < 12) hours += 12;
-        if (meridiem === 'AM' && hours === 12) hours = 0;
-      }
-      
-      const startDate = new Date(event.date);
-      startDate.setHours(hours, minutes, 0, 0);
-      
-      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-      
-      const params = new URLSearchParams({
-        action: 'TEMPLATE',
-        text: event.title,
-        details: `Class Type: ${event.type}\nInstructor: ${event.instructor}\nLocation: RSF Berkeley`,
-        dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-        location: '2301 Bancroft Way, Berkeley, CA 94720'
-      });
-
-      window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
     };
 
     return (
@@ -974,6 +975,37 @@ const FitnessDashboard: React.FC = () => {
       axis: 'x',
       intersect: false
     }
+  };
+
+  const addToGoogleCalendar = (event: CalendarEvent) => {
+    const timeStr = event.time || '';
+    let hours = 0;
+    let minutes = 0;
+    
+    const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (timeMatch) {
+      hours = parseInt(timeMatch[1]);
+      minutes = parseInt(timeMatch[2]);
+      const meridiem = timeMatch[3].toUpperCase();
+      
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+    }
+    
+    const startDate = new Date(event.date);
+    startDate.setHours(hours, minutes, 0, 0);
+    
+    const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+    
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: event.title,
+      details: `Class Type: ${event.type}\nInstructor: ${event.instructor}\nLocation: RSF Berkeley`,
+      dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+      location: '2301 Bancroft Way, Berkeley, CA 94720'
+    });
+
+    window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
   };
 
   return (
