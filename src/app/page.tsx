@@ -573,7 +573,7 @@ const FitnessDashboard: React.FC = () => {
               textAlign: 'center',
               padding: '8px 0'
             }}>
-              No classes
+              Loading...
             </div>
           )}
         </div>
@@ -1049,6 +1049,80 @@ const FitnessDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
             <div className="flex justify-between items-center mb-4">
+              <h3 className="text-[#003262] m-0">{selectedMeter} Crowd Meter</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSelectedMeter('RSF')}
+                  className={`px-4 py-2 border-none rounded-lg text-sm font-medium cursor-pointer transition-all ${
+                    selectedMeter === 'RSF' 
+                      ? 'bg-[#003262] text-white' 
+                      : 'bg-gray-200 text-gray-600'
+                  }`}
+                >
+                  RSF
+                </button>
+                <button
+                  onClick={() => setSelectedMeter('CMS')}
+                  className={`px-4 py-2 border-none rounded-lg text-sm font-medium cursor-pointer transition-all ${
+                    selectedMeter === 'CMS' 
+                      ? 'bg-[#003262] text-white' 
+                      : 'bg-gray-200 text-gray-600'
+                  }`}
+                >
+                  CMS
+                </button>
+              </div>
+            </div>
+            <div className="relative w-full h-[400px] overflow-hidden rounded-lg bg-gray-50">
+              <iframe 
+                key={selectedMeter}
+                src={selectedMeter === 'RSF' 
+                  ? "https://safe.density.io/#/displays/dsp_956223069054042646?token=shr_o69HxjQ0BYrY2FPD9HxdirhJYcFDCeRolEd744Uj88e"
+                  : "https://safe.density.io/#/displays/dsp_1160333760881754703?token=shr_CPp9qbE0jN351cCEQmtDr4R90r3SIjZASSY8GU5O3gR"
+                }
+                className="absolute inset-0 w-full h-full border-0 rounded-lg"
+                frameBorder="0"
+                scrolling="no"
+                title={`${selectedMeter} Crowd Meter`}
+              />
+            </div>
+          </div>
+
+          <CalendarCarousel
+            title="RSF Class Schedule"
+            subtitle="Browse and join group fitness classes"
+          >
+            {generateCalendarDays().map(day => (
+              <div key={day.date} className="pl-4 flex-[0_0_100%] md:flex-none md:w-72 min-w-0">
+                <CalendarDay {...day} />
+              </div>
+            ))}
+          </CalendarCarousel>
+
+          <CalendarCarousel
+            title="Personal Calendar"
+            subtitle="Your personal workout schedule"
+          >
+            {Array.from({ length: 7 }, (_, i) => {
+              const date = new Date();
+              date.setDate(date.getDate() + i);
+              const dateStr = date.toISOString().split('T')[0];
+              const dayEvents = personalEvents.filter(event => event.date === dateStr);
+              
+              return (
+                <div key={dateStr} className="pl-4 flex-[0_0_100%] md:flex-none md:w-72 min-w-0">
+                  <PersonalCalendarDay
+                    key={dateStr}
+                    date={dateStr}
+                    events={dayEvents}
+                  />
+                </div>
+              );
+            })}
+          </CalendarCarousel>
+
+          <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
+            <div className="flex justify-between items-center mb-4">
               <h3 className="text-[#003262] m-0">Workout Progress</h3>
               <div className="flex gap-2">
                 <button
@@ -1242,46 +1316,7 @@ const FitnessDashboard: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-[#003262] m-0">{selectedMeter} Crowd Meter</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedMeter('RSF')}
-                  className={`px-4 py-2 border-none rounded-lg text-sm font-medium cursor-pointer transition-all ${
-                    selectedMeter === 'RSF' 
-                      ? 'bg-[#003262] text-white' 
-                      : 'bg-gray-200 text-gray-600'
-                  }`}
-                >
-                  RSF
-                </button>
-                <button
-                  onClick={() => setSelectedMeter('CMS')}
-                  className={`px-4 py-2 border-none rounded-lg text-sm font-medium cursor-pointer transition-all ${
-                    selectedMeter === 'CMS' 
-                      ? 'bg-[#003262] text-white' 
-                      : 'bg-gray-200 text-gray-600'
-                  }`}
-                >
-                  CMS
-                </button>
-              </div>
-            </div>
-            <div className="relative w-full h-[400px] overflow-hidden rounded-lg bg-gray-50">
-              <iframe 
-                key={selectedMeter}
-                src={selectedMeter === 'RSF' 
-                  ? "https://safe.density.io/#/displays/dsp_956223069054042646?token=shr_o69HxjQ0BYrY2FPD9HxdirhJYcFDCeRolEd744Uj88e"
-                  : "https://safe.density.io/#/displays/dsp_1160333760881754703?token=shr_CPp9qbE0jN351cCEQmtDr4R90r3SIjZASSY8GU5O3gR"
-                }
-                className="absolute inset-0 w-full h-full border-0 rounded-lg"
-                frameBorder="0"
-                scrolling="no"
-                title={`${selectedMeter} Crowd Meter`}
-              />
-            </div>
-          </div>
+
           <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-[#003262] text-xl font-semibold">Goals</h3>
@@ -1323,76 +1358,8 @@ const FitnessDashboard: React.FC = () => {
                 );
               })}
             </div>
-            {showGoalModal && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-                <div ref={goalModalRef} className="bg-white rounded-2xl p-8 w-[480px] shadow-xl">
-                  <div className="flex items-center justify-between mb-6">
-                    <h4 className="text-xl font-semibold text-[#003262]">Adjust Workout Goals</h4>
-                    <button
-                      onClick={() => setShowGoalModal(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="space-y-6">
-                    {Object.entries(workoutProgress).map(([type, progress]) => {
-                      const color = type === 'arms' ? '#003262' :
-                                   type === 'legs' ? '#FDB515' :
-                                   type === 'back' ? '#666666' :
-                                   type === 'core' ? '#2E8B57' :
-                                   type === 'chest' ? '#4B0082' :
-                                   '#FF6B6B';
-                      return (
-                        <div key={type}>
-                          <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-gray-700 capitalize">
-                              {type}
-                            </label>
-                            <span className="text-sm font-medium" style={{ color }}>
-                              {progress}%
-                            </span>
-                          </div>
-                          <div className="relative">
-                            <input
-                              type="range"
-                              min="0"
-                              max="100"
-                              value={progress}
-                              onChange={(e) => {
-                                setWorkoutProgress(prev => ({
-                                  ...prev,
-                                  [type]: parseInt(e.target.value)
-                                }));
-                              }}
-                              className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer"
-                              style={{
-                                backgroundImage: `linear-gradient(to right, ${color} 0%, ${color} ${progress}%, #f3f4f6 ${progress}%, #f3f4f6 100%)`
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100">
-                    <button
-                      className="px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-xl text-sm font-semibold transition-colors"
-                      onClick={() => setShowGoalModal(false)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="px-6 py-3 bg-[#003262] text-white rounded-xl text-sm font-semibold transition-all hover:bg-[#002142]"
-                      onClick={() => setShowGoalModal(false)}
-                    >
-                      Save Goals
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
+
           <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-[#003262] text-xl font-semibold">Weight Data</h3>
@@ -1417,98 +1384,62 @@ const FitnessDashboard: React.FC = () => {
               <Line data={weightChartData} options={weightChartOptions} />
             </div>
           </div>
-        </div>
 
-        <CalendarCarousel
-          title="RSF Class Schedule"
-          subtitle="Browse and join group fitness classes"
-        >
-          {generateCalendarDays().map(day => (
-            <div key={day.date} className="pl-4 flex-[0_0_100%] md:flex-none md:w-72 min-w-0">
-              <CalendarDay {...day} />
+          {googleCalendarID && ready ? (
+            <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
+              <h3 className="text-[#003262] mb-4 text-xl font-semibold">Google Calendar</h3>
+              <iframe
+                src={`https://calendar.google.com/calendar/embed?src=${googleCalendarID}&ctz=America%2FLos_Angeles`}
+                className="w-full h-[400px] rounded-lg border-0"
+                frameBorder="0"
+                scrolling="no"
+              />
             </div>
-          ))}
-        </CalendarCarousel>
-
-        <CalendarCarousel
-          title="Personal Calendar"
-          subtitle="Your personal workout schedule"
-        >
-          {Array.from({ length: 7 }, (_, i) => {
-            const date = new Date();
-            date.setDate(date.getDate() + i);
-            const dateStr = date.toISOString().split('T')[0];
-            const dayEvents = personalEvents.filter(event => event.date === dateStr);
-            
-            return (
-              <div key={dateStr} className="pl-4 flex-[0_0_100%] md:flex-none md:w-72 min-w-0">
-                <PersonalCalendarDay
-                  key={dateStr}
-                  date={dateStr}
-                  events={dayEvents}
-                />
-              </div>
-            );
-          })}
-        </CalendarCarousel>
-
-        {googleCalendarID && ready ? (
-          <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
-            <h3 className="text-[#003262] mb-4 text-xl font-semibold">Google Calendar</h3>
-            <iframe
-              src={`https://calendar.google.com/calendar/embed?src=${googleCalendarID}&ctz=America%2FLos_Angeles`}
-              className="w-full h-[400px] rounded-lg border-0"
-              frameBorder="0"
-              scrolling="no"
-            />
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl p-12 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg text-center">
-            <p className="text-gray-600 mb-4">
-              Connect your Google Calendar to view your schedule
-            </p>
-            {showGCalInput ? (
-              <div className="max-w-md mx-auto">
-                <input
-                  type="text"
-                  placeholder="Enter your Google Calendar ID"
-                  value={googleCalendarID}
-                  onChange={(e) => setGoogleCalendarID(e.target.value)}
-                  className="w-full p-3 rounded-lg border border-gray-200 mb-3 text-sm focus:border-[#003262] focus:outline-none"
-                />
-                <div className="flex gap-2 justify-center">
-                  <button
-                    onClick={() => setShowGCalInput(false)}
-                    className="px-6 py-3 bg-gray-200 text-gray-600 border-none rounded-lg text-sm font-semibold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      setReady(true);
-                      if (googleCalendarID) setShowGCalInput(false);
-                    }}
-                    className={`px-6 py-3 bg-[#003262] text-white border-none rounded-lg text-sm font-semibold cursor-pointer ${
-                      !googleCalendarID ? 'opacity-50' : ''
-                    }`}
-                  >
-                    Connect
-                  </button>
+          ) : (
+            <div className="bg-white rounded-2xl p-12 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg text-center">
+              <p className="text-gray-600 mb-4">
+                Connect your Google Calendar to view your schedule
+              </p>
+              {showGCalInput ? (
+                <div className="max-w-md mx-auto">
+                  <input
+                    type="text"
+                    placeholder="Enter your Google Calendar ID"
+                    value={googleCalendarID}
+                    onChange={(e) => setGoogleCalendarID(e.target.value)}
+                    className="w-full p-3 rounded-lg border border-gray-200 mb-3 text-sm focus:border-[#003262] focus:outline-none"
+                  />
+                  <div className="flex gap-2 justify-center">
+                    <button
+                      onClick={() => setShowGCalInput(false)}
+                      className="px-6 py-3 bg-gray-200 text-gray-600 border-none rounded-lg text-sm font-semibold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        setReady(true);
+                        if (googleCalendarID) setShowGCalInput(false);
+                      }}
+                      className={`px-6 py-3 bg-[#003262] text-white border-none rounded-lg text-sm font-semibold cursor-pointer ${
+                        !googleCalendarID ? 'opacity-50' : ''
+                      }`}
+                    >
+                      Connect
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowGCalInput(true)}
-                className="px-6 py-3 bg-[#003262] text-white border-none rounded-lg text-sm font-semibold cursor-pointer transition-colors hover:bg-[#FDB515]"
-              >
-                Connect Google Calendar
-              </button>
-            )}
-            <p className="text-gray-600 text-xs mt-4">
-              You can find your Calendar ID in Google Calendar Settings
-            </p>
-          </div>
-        )}
+              ) : (
+                <button
+                  onClick={() => setShowGCalInput(true)}
+                  className="px-6 py-3 bg-[#003262] text-white border-none rounded-lg text-sm font-semibold cursor-pointer transition-colors hover:bg-[#FDB515]"
+                >
+                  Connect Google Calendar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         {showWeightModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
