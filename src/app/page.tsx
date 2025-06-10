@@ -594,120 +594,103 @@ const FitnessDashboard: React.FC = () => {
     });
 
     const [showAddModal, setShowAddModal] = useState(false);
-    const [newEventTitle, setNewEventTitle] = useState('');
-    const [newEventType, setNewEventType] = useState('STRENGTH');
-    const [newEventTime, setNewEventTime] = useState('');
-    const modalRef = useRef<HTMLDivElement>(null);
+    const [newEvent, setNewEvent] = useState<CalendarEvent>({
+      id: '',
+      date,
+      title: '',
+      type: 'strength',
+      time: '',
+      location: '',
+      isPersonal: true
+    });
 
-    useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-          setShowAddModal(false);
-        }
-      };
-
-      if (showAddModal) {
-        document.addEventListener('mousedown', handleClickOutside);
-      }
-
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }, [showAddModal]);
+    const handleAddEvent = () => {
+      setPersonalEvents(prev => [...prev, newEvent]);
+      setShowAddModal(false);
+    };
 
     return (
       <div
         ref={drop as unknown as React.LegacyRef<HTMLDivElement>}
-        className={`min-h-[80px] bg-white border rounded-lg p-2 transition-all w-[${MOBILE_CARD_WIDTH}] md:w-full flex-shrink-0 ${
+        className={`min-h-[400px] bg-white border rounded-lg p-4 transition-all w-[${MOBILE_CARD_WIDTH}] md:w-full flex-shrink-0 ${
           isOver ? 'border-[#FDB515] bg-[#FDB51510]' : 'border-gray-200'
         }`}
         onClick={() => setShowAddModal(true)}
       >
-        <div className="text-md font-semibold mb-1">{new Date(date).getDate()}</div>
-        {events.map(event => (
-          <PersonalEvent key={event.id} event={event} />
-        ))}
+        <div className="text-sm font-semibold mb-3">{new Date(date).getDate()}</div>
+        <div className="space-y-2">
+          {events.map(event => (
+            <PersonalEvent key={event.id} event={event} />
+          ))}
+        </div>
         {showAddModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
-            <div ref={modalRef} className="bg-white rounded-2xl p-8 w-[480px] shadow-xl">
-              <div className="flex items-center justify-between mb-6">
-                <h4 className="text-xl font-semibold text-[#003262]">Add Personal Workout</h4>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  ✕
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-lg p-4 w-full max-w-[90vw] md:max-w-md" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Add Personal Workout</h3>
+                <button onClick={() => setShowAddModal(false)} className="text-gray-500 hover:text-gray-700">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Workout Title
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
                   <input
                     type="text"
-                    placeholder="e.g., Morning Run"
-                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-sm transition-all focus:border-[#003262] focus:outline-none"
-                    value={newEventTitle}
-                    onChange={(e) => setNewEventTitle(e.target.value)}
+                    value={newEvent.title}
+                    onChange={e => setNewEvent(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    placeholder="Workout title"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Workout Type
-                  </label>
-                  <select
-                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-sm transition-all focus:border-[#003262] focus:outline-none bg-white"
-                    value={newEventType}
-                    onChange={(e) => setNewEventType(e.target.value)}
-                  >
-                    <option value="STRENGTH">Strength Training</option>
-                    <option value="CARDIO">Cardio</option>
-                    <option value="MIND/BODY">Mind & Body</option>
-                    <option value="DANCE">Dance</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Time
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
                   <input
                     type="time"
-                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-sm transition-all focus:border-[#003262] focus:outline-none"
-                    value={newEventTime}
-                    onChange={(e) => setNewEventTime(e.target.value)}
+                    value={newEvent.time}
+                    onChange={e => setNewEvent(prev => ({ ...prev, time: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
                   />
                 </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-8">
-                <button
-                  className="px-6 py-3 text-gray-600 hover:bg-gray-50 rounded-xl text-sm font-semibold transition-colors"
-                  onClick={() => setShowAddModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-6 py-3 bg-[#003262] text-white rounded-xl text-sm font-semibold transition-all hover:bg-[#002142] disabled:opacity-50"
-                  onClick={() => {
-                    if (newEventTitle) {
-                      setPersonalEvents(prev => [...prev, {
-                        id: `personal-${Date.now()}`,
-                        date,
-                        title: newEventTitle,
-                        type: newEventType,
-                        time: newEventTime,
-                        isPersonal: true
-                      }]);
-                      setShowAddModal(false);
-                      setNewEventTitle('');
-                      setNewEventType('STRENGTH');
-                      setNewEventTime('');
-                    }
-                  }}
-                  disabled={!newEventTitle}
-                >
-                  Add Workout
-                </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={newEvent.location}
+                    onChange={e => setNewEvent(prev => ({ ...prev, location: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    placeholder="Workout location"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value={newEvent.type}
+                    onChange={e => setNewEvent(prev => ({ ...prev, type: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                  >
+                    <option value="strength">Strength</option>
+                    <option value="cardio">Cardio</option>
+                    <option value="flexibility">Flexibility</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div className="flex justify-end space-x-2 pt-2">
+                  <button
+                    onClick={() => setShowAddModal(false)}
+                    className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddEvent}
+                    className="px-3 py-1.5 text-sm bg-[#FDB515] text-white rounded-md hover:bg-[#FDB515]/90"
+                  >
+                    Add Workout
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -738,19 +721,28 @@ const FitnessDashboard: React.FC = () => {
             {event.time && <div className="opacity-90 text-xs">{event.time}</div>}
             {event.instructor && <div className="opacity-80 text-xs">{event.instructor}</div>}
           </div>
-          <button
-            onClick={() => {
-              setPersonalEvents(prev => [...prev, {
-                ...event,
-                id: `personal-${Date.now()}`,
-                isPersonal: true
-              }]);
-            }}
-            className="px-3 py-1.5 bg-white rounded text-xs font-semibold transition-colors hover:bg-gray-100 w-full sm:w-auto"
-            style={{ color: getTypeColor(event.type) }}
-          >
-            Add
-          </button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                addToGoogleCalendar(event);
+              }}
+              className="flex-1 sm:flex-none px-3 py-1.5 bg-white rounded text-xs font-semibold text-[#4285f4] transition-colors hover:bg-gray-100"
+            >
+              GCal
+            </button>
+            {event.isPersonal && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPersonalEvents(prev => prev.filter(e => e.id !== event.id));
+                }}
+                className="flex-1 sm:flex-none px-3 py-1.5 bg-white rounded text-xs font-semibold text-red-500 transition-colors hover:bg-gray-100"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -810,24 +802,24 @@ const FitnessDashboard: React.FC = () => {
     return (
       <div
         ref={event.isPersonal ? (drag as unknown as React.LegacyRef<HTMLDivElement>) : undefined}
-        className={`p-3 rounded-lg text-white text-sm mb-2 transition-all  md:w-full ${
+        className={`p-3 rounded-lg text-white text-sm mb-2 transition-all w-full ${
           isDragging ? 'opacity-50' : 'hover:opacity-90'
         } ${event.isPersonal ? 'cursor-move' : ''}`}
         style={{ backgroundColor: getTypeColor(event.type) }}
       >
-        <div className="flex justify-between items-start">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+          <div className="flex-1">
             <div className="font-semibold mb-1">{event.title}</div>
             {event.time && <div className="opacity-90 text-xs">{event.time}</div>}
             {event.instructor && <div className="opacity-80 text-xs">{event.instructor}</div>}
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-2 w-full sm:w-auto">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 addToGoogleCalendar(event);
               }}
-              className="px-3 py-1.5 bg-white rounded text-xs font-semibold text-[#4285f4] transition-colors hover:bg-gray-100"
+              className="flex-1 sm:flex-none px-3 py-1.5 bg-white rounded text-xs font-semibold text-[#4285f4] transition-colors hover:bg-gray-100"
             >
               GCal
             </button>
@@ -837,7 +829,7 @@ const FitnessDashboard: React.FC = () => {
                   e.stopPropagation();
                   setPersonalEvents(prev => prev.filter(e => e.id !== event.id));
                 }}
-                className="px-3 py-1.5 bg-white rounded text-xs font-semibold text-red-500 transition-colors hover:bg-gray-100"
+                className="flex-1 sm:flex-none px-3 py-1.5 bg-white rounded text-xs font-semibold text-red-500 transition-colors hover:bg-gray-100"
               >
                 ✕
               </button>
@@ -1250,7 +1242,7 @@ const FitnessDashboard: React.FC = () => {
           </div>
           <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-[#003262] text-xl font-semibold">Progress Goals</h3>
+              <h3 className="text-[#003262] text-xl font-semibold">Goals</h3>
               <button
                 onClick={() => setShowGoalModal(true)}
                 className="px-4 py-2 bg-[#003262] text-white rounded-lg text-sm font-semibold hover:bg-[#002142]"
@@ -1361,7 +1353,7 @@ const FitnessDashboard: React.FC = () => {
           </div>
           <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-[#003262] text-xl font-semibold">Weight Progress</h3>
+              <h3 className="text-[#003262] text-xl font-semibold">Weight Data</h3>
               <button
                 onClick={() => setShowWeightModal(true)}
                 className="px-4 py-2 bg-[#003262] text-white rounded-lg text-sm font-semibold hover:bg-[#002142]"
@@ -1411,11 +1403,22 @@ const FitnessDashboard: React.FC = () => {
           title="Personal Calendar"
           subtitle="Your personal workout schedule"
         >
-          {generatePersonalCalendarDays().map(day => (
-            <div key={day.date} className={`min-w-[${MOBILE_CARD_WIDTH}] md:min-w-[${DESKTOP_CARD_WIDTH}]`}>
-              <PersonalCalendarDay key={day.date} date={day.date} events={day.events} />
-            </div>
-          ))}
+          <div className="flex overflow-x-auto md:overflow-x-visible md:grid md:grid-cols-7 gap-4 pb-4 md:pb-0">
+            {Array.from({ length: 7 }, (_, i) => {
+              const date = new Date();
+              date.setDate(date.getDate() + i);
+              const dateStr = date.toISOString().split('T')[0];
+              const dayEvents = personalEvents.filter(event => event.date === dateStr);
+              
+              return (
+                <PersonalCalendarDay
+                  key={dateStr}
+                  date={dateStr}
+                  events={dayEvents}
+                />
+              );
+            })}
+          </div>
         </CalendarCarousel>
 
         {googleCalendarID && ready ? (
