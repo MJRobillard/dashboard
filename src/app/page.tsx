@@ -94,7 +94,7 @@ interface GymFriend {
 }
 
 // Global configuration
-const MOBILE_CARD_WIDTH = '70vw'; // Adjust this value to change mobile card width
+const MOBILE_CARD_WIDTH = '90vw'; // Adjust this value to change mobile card width
 const DESKTOP_CARD_WIDTH = '300px'; // Adjust this value to change desktop card width
 
 const CalendarCarousel: React.FC<{
@@ -128,7 +128,7 @@ const CalendarCarousel: React.FC<{
       <h3 className="text-[#003262] mb-4 text-xl font-semibold">{title}</h3>
       <p className="text-sm text-gray-600 mb-4">{subtitle}</p>
       <div className="overflow-hidden" ref={emblaRef}>
-        <div className="flex gap-3">
+        <div className="flex -ml-4">
           {children}
         </div>
       </div>
@@ -538,6 +538,14 @@ const FitnessDashboard: React.FC = () => {
       })
     });
 
+    const formatDate = (dateStr: string) => {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { 
+        day: 'numeric',
+        month: 'short'
+      });
+    };
+
     return (
       <div
         ref={drop as unknown as React.LegacyRef<HTMLDivElement>}
@@ -545,19 +553,13 @@ const FitnessDashboard: React.FC = () => {
           isOver ? 'bg-[#FDB51522]' : 'bg-white'
         } border-2 ${
           isToday ? 'border-[#003262]' : isOver ? 'border-[#FDB515]' : 'border-gray-200'
-        } rounded-xl p-3 transition-all w-[${MOBILE_CARD_WIDTH}] md:w-full flex-shrink-0`}
+        } rounded-xl p-3 transition-all w-full flex-shrink-0`}
       >
         <div style={{ 
-          fontSize: '12px', 
-          fontWeight: 'bold', 
-          marginBottom: '8px',
-          color: isToday ? berkeleyBlue : '#333',
-          textAlign: 'center'
-        }}>
-          <div>{dayName}</div>
-          <div style={{ fontSize: '16px', marginTop: '2px' }}>
-            {new Date(date).getDate()}
-          </div>
+          color: isToday ? '#003262' : '#666',
+          fontWeight: isToday ? '600' : '500'
+        }} className="text-sm mb-2">
+          {dayName}, {formatDate(date)}
         </div>
         <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
           {events.length > 0 ? (
@@ -604,6 +606,14 @@ const FitnessDashboard: React.FC = () => {
       isPersonal: true
     });
 
+    const formatDate = (dateStr: string) => {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { 
+        day: 'numeric',
+        month: 'short'
+      });
+    };
+
     const addToGoogleCalendar = (event: CalendarEvent) => {
       const timeStr = event.time || '';
       let hours = 0;
@@ -644,12 +654,12 @@ const FitnessDashboard: React.FC = () => {
     return (
       <div
         ref={drop as unknown as React.LegacyRef<HTMLDivElement>}
-        className={`min-h-[400px] bg-white border rounded-lg p-4 transition-all w-[${MOBILE_CARD_WIDTH}] md:w-full flex-shrink-0 ${
+        className={`min-h-[400px] bg-white border rounded-lg p-4 transition-all w-full flex-shrink-0 ${
           isOver ? 'border-[#FDB515] bg-[#FDB51510]' : 'border-gray-200'
         }`}
         onClick={() => setShowAddModal(true)}
       >
-        <div className="text-sm font-semibold mb-3">{new Date(date).getDate()}</div>
+        <div className="text-sm font-semibold mb-3">{formatDate(date)}</div>
         <div className="space-y-2">
           {events.map(event => (
             <PersonalEvent key={event.id} event={event} />
@@ -1409,48 +1419,37 @@ const FitnessDashboard: React.FC = () => {
           </div>
         </div>
 
-        <CalendarCarousel 
-          title="RSF Activities Calendar"
-          subtitle="Click 'Add' to add activities to your personal calendar"
+        <CalendarCarousel
+          title="RSF Class Schedule"
+          subtitle="Browse and join group fitness classes"
         >
-          {isLoading ? (
-            <div className="flex justify-center items-center h-[200px] text-[#003262] text-sm font-medium">
-              Loading RSF activities...
+          {generateCalendarDays().map(day => (
+            <div key={day.date} className="pl-4 flex-[0_0_100%] md:flex-none md:w-72 min-w-0">
+              <CalendarDay {...day} />
             </div>
-          ) : (
-            generateCalendarDays().map(day => (
-              <div key={day.date} className={`min-w-[${MOBILE_CARD_WIDTH}] md:min-w-[${DESKTOP_CARD_WIDTH}]`}>
-                <CalendarDay 
-                  date={day.date} 
-                  events={day.events}
-                  dayName={day.dayName}
-                  isToday={day.isToday}
-                />
-              </div>
-            ))
-          )}
+          ))}
         </CalendarCarousel>
 
-        <CalendarCarousel 
+        <CalendarCarousel
           title="Personal Calendar"
           subtitle="Your personal workout schedule"
         >
-          <div className="flex overflow-x-auto md:overflow-x-visible md:grid md:grid-cols-7 gap-4 pb-4 md:pb-0">
-            {Array.from({ length: 7 }, (_, i) => {
-              const date = new Date();
-              date.setDate(date.getDate() + i);
-              const dateStr = date.toISOString().split('T')[0];
-              const dayEvents = personalEvents.filter(event => event.date === dateStr);
-              
-              return (
+          {Array.from({ length: 7 }, (_, i) => {
+            const date = new Date();
+            date.setDate(date.getDate() + i);
+            const dateStr = date.toISOString().split('T')[0];
+            const dayEvents = personalEvents.filter(event => event.date === dateStr);
+            
+            return (
+              <div key={dateStr} className="pl-4 flex-[0_0_100%] md:flex-none md:w-72 min-w-0">
                 <PersonalCalendarDay
                   key={dateStr}
                   date={dateStr}
                   events={dayEvents}
                 />
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </CalendarCarousel>
 
         {googleCalendarID && ready ? (
