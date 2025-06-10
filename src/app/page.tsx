@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -19,6 +19,7 @@ import {
 import { DndProvider } from 'react-dnd';
 import { useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import useEmblaCarousel from 'embla-carousel-react';
 
 ChartJS.register(
   CategoryScale,
@@ -91,6 +92,60 @@ interface GymFriend {
   workoutCount: number;
   isOnline: boolean;
 }
+
+// Global configuration
+const MOBILE_CARD_WIDTH = '70vw'; // Adjust this value to change mobile card width
+const DESKTOP_CARD_WIDTH = '300px'; // Adjust this value to change desktop card width
+
+const CalendarCarousel: React.FC<{
+  children: React.ReactNode;
+  title: string;
+  subtitle: string;
+}> = ({ children, title, subtitle }) => {
+  const [emblaRef, emblaApi] = useEmblaCarousel({
+    align: 'start',
+    containScroll: 'trimSnaps',
+    dragFree: true,
+  });
+
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [scrollSnaps, setScrollSnaps] = useState<number[]>([]);
+
+  const onSelect = useCallback(() => {
+    if (!emblaApi) return;
+    setSelectedIndex(emblaApi.selectedScrollSnap());
+  }, [emblaApi]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    setScrollSnaps(emblaApi.scrollSnapList());
+    emblaApi.on('select', onSelect);
+    onSelect();
+  }, [emblaApi, onSelect]);
+
+  return (
+    <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg mb-8">
+      <h3 className="text-[#003262] mb-4 text-xl font-semibold">{title}</h3>
+      <p className="text-sm text-gray-600 mb-4">{subtitle}</p>
+      <div className="overflow-hidden" ref={emblaRef}>
+        <div className="flex gap-3">
+          {children}
+        </div>
+      </div>
+      <div className="flex justify-center gap-1 mt-4">
+        {scrollSnaps.map((_, index) => (
+          <button
+            key={index}
+            className={`w-2 h-2 rounded-full transition-all ${
+              index === selectedIndex ? 'bg-[#003262] w-4' : 'bg-gray-300'
+            }`}
+            onClick={() => emblaApi?.scrollTo(index)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const FitnessDashboard: React.FC = () => {
   const [workoutData, setWorkoutData] = useState<WorkoutData[]>([]);
@@ -490,7 +545,7 @@ const FitnessDashboard: React.FC = () => {
           isOver ? 'bg-[#FDB51522]' : 'bg-white'
         } border-2 ${
           isToday ? 'border-[#003262]' : isOver ? 'border-[#FDB515]' : 'border-gray-200'
-        } rounded-xl p-3 transition-all`}
+        } rounded-xl p-3 transition-all w-[${MOBILE_CARD_WIDTH}] md:w-full flex-shrink-0`}
       >
         <div style={{ 
           fontSize: '12px', 
@@ -563,12 +618,12 @@ const FitnessDashboard: React.FC = () => {
     return (
       <div
         ref={drop as unknown as React.LegacyRef<HTMLDivElement>}
-        className={`min-h-[80px] bg-white border rounded-lg p-2 transition-all ${
+        className={`min-h-[80px] bg-white border rounded-lg p-2 transition-all w-[${MOBILE_CARD_WIDTH}] md:w-full flex-shrink-0 ${
           isOver ? 'border-[#FDB515] bg-[#FDB51510]' : 'border-gray-200'
         }`}
         onClick={() => setShowAddModal(true)}
       >
-        <div className="text-xs font-semibold mb-1">{new Date(date).getDate()}</div>
+        <div className="text-md font-semibold mb-1">{new Date(date).getDate()}</div>
         {events.map(event => (
           <PersonalEvent key={event.id} event={event} />
         ))}
@@ -674,14 +729,14 @@ const FitnessDashboard: React.FC = () => {
 
     return (
       <div
-        className="p-2 rounded-lg text-white text-xs mb-1 transition-all hover:opacity-90"
+        className="p-3 rounded-lg text-white text-sm mb-2 transition-all hover:opacity-90 w-full"
         style={{ backgroundColor: getTypeColor(event.type) }}
       >
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="font-semibold mb-0.5">{event.title}</div>
-            {event.time && <div className="opacity-90 text-[10px]">{event.time}</div>}
-            {event.instructor && <div className="opacity-80 text-[10px]">{event.instructor}</div>}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+          <div className="flex-1">
+            <div className="font-semibold mb-1">{event.title}</div>
+            {event.time && <div className="opacity-90 text-xs">{event.time}</div>}
+            {event.instructor && <div className="opacity-80 text-xs">{event.instructor}</div>}
           </div>
           <button
             onClick={() => {
@@ -691,7 +746,7 @@ const FitnessDashboard: React.FC = () => {
                 isPersonal: true
               }]);
             }}
-            className="ml-2 px-2 py-1 bg-white rounded text-[10px] font-semibold transition-colors hover:bg-gray-100"
+            className="px-3 py-1.5 bg-white rounded text-xs font-semibold transition-colors hover:bg-gray-100 w-full sm:w-auto"
             style={{ color: getTypeColor(event.type) }}
           >
             Add
@@ -755,16 +810,16 @@ const FitnessDashboard: React.FC = () => {
     return (
       <div
         ref={event.isPersonal ? (drag as unknown as React.LegacyRef<HTMLDivElement>) : undefined}
-        className={`p-2 rounded-lg text-white text-xs mb-1 transition-all ${
+        className={`p-3 rounded-lg text-white text-sm mb-2 transition-all  md:w-full ${
           isDragging ? 'opacity-50' : 'hover:opacity-90'
         } ${event.isPersonal ? 'cursor-move' : ''}`}
         style={{ backgroundColor: getTypeColor(event.type) }}
       >
         <div className="flex justify-between items-start">
           <div>
-            <div className="font-semibold mb-0.5">{event.title}</div>
-            {event.time && <div className="opacity-90 text-[10px]">{event.time}</div>}
-            {event.instructor && <div className="opacity-80 text-[10px]">{event.instructor}</div>}
+            <div className="font-semibold mb-1">{event.title}</div>
+            {event.time && <div className="opacity-90 text-xs">{event.time}</div>}
+            {event.instructor && <div className="opacity-80 text-xs">{event.instructor}</div>}
           </div>
           <div className="flex gap-1">
             <button
@@ -772,7 +827,7 @@ const FitnessDashboard: React.FC = () => {
                 e.stopPropagation();
                 addToGoogleCalendar(event);
               }}
-              className="px-2 py-1 bg-white rounded text-[10px] font-semibold text-[#4285f4] transition-colors hover:bg-gray-100"
+              className="px-3 py-1.5 bg-white rounded text-xs font-semibold text-[#4285f4] transition-colors hover:bg-gray-100"
             >
               GCal
             </button>
@@ -782,7 +837,7 @@ const FitnessDashboard: React.FC = () => {
                   e.stopPropagation();
                   setPersonalEvents(prev => prev.filter(e => e.id !== event.id));
                 }}
-                className="px-2 py-1 bg-white rounded text-[10px] font-semibold text-red-500 transition-colors hover:bg-gray-100"
+                className="px-3 py-1.5 bg-white rounded text-xs font-semibold text-red-500 transition-colors hover:bg-gray-100"
               >
                 ✕
               </button>
@@ -1330,41 +1385,38 @@ const FitnessDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg mb-8">
-          <h3 className="text-[#003262] mb-4 text-xl font-semibold">RSF Activities Calendar</h3>
-          <p className="text-sm text-gray-600 mb-4">
-            Click "Add" to add activities to your personal calendar
-          </p>
+        <CalendarCarousel 
+          title="RSF Activities Calendar"
+          subtitle="Click 'Add' to add activities to your personal calendar"
+        >
           {isLoading ? (
             <div className="flex justify-center items-center h-[200px] text-[#003262] text-sm font-medium">
               Loading RSF activities...
             </div>
           ) : (
-            <div className="grid grid-cols-7 gap-3">
-              {generateCalendarDays().map(day => (
+            generateCalendarDays().map(day => (
+              <div key={day.date} className={`min-w-[${MOBILE_CARD_WIDTH}] md:min-w-[${DESKTOP_CARD_WIDTH}]`}>
                 <CalendarDay 
-                  key={day.date} 
                   date={day.date} 
                   events={day.events}
                   dayName={day.dayName}
                   isToday={day.isToday}
                 />
-              ))}
-            </div>
+              </div>
+            ))
           )}
-        </div>
+        </CalendarCarousel>
 
-        <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg mb-8">
-          <h3 className="text-[#003262] mb-4 text-xl font-semibold">Personal Calendar</h3>
-          <p className="text-sm text-gray-600 mb-4">
-            Your personal workout schedule
-          </p>
-          <div className="grid grid-cols-7 gap-2">
-            {generatePersonalCalendarDays().map(day => (
+        <CalendarCarousel 
+          title="Personal Calendar"
+          subtitle="Your personal workout schedule"
+        >
+          {generatePersonalCalendarDays().map(day => (
+            <div key={day.date} className={`min-w-[${MOBILE_CARD_WIDTH}] md:min-w-[${DESKTOP_CARD_WIDTH}]`}>
               <PersonalCalendarDay key={day.date} date={day.date} events={day.events} />
-            ))}
-          </div>
-        </div>
+            </div>
+          ))}
+        </CalendarCarousel>
 
         {googleCalendarID && ready ? (
           <div className="bg-white rounded-2xl p-6 shadow-md transition-all hover:translate-y-[-2px] hover:shadow-lg">
