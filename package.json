@@ -16,6 +16,7 @@
     "@types/moment": "^2.11.29",
     "@types/react-big-calendar": "^1.16.2",
     "@types/react-dnd": "^3.0.2",
+    "@vercel/analytics": "^1.5.0",
     "chart.js": "^4.4.9",
     "embla-carousel-react": "^8.6.0",
     "moment": "^2.30.1",
