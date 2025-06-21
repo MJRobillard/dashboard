@@ -2005,7 +2005,7 @@ const FitnessDashboard: React.FC = () => {
               isOpen={isFriendsPopoverOpen}
               positions={["bottom"]}
               content={() => (
-                <div className="w-64 bg-slate-800 z-[40] border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm">
+                <div className="w-64 bg-slate-800 z-[99999] border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm">
                   <div className="text-yellow-300 font-semibold text-sm mb-2">Online Friends</div>
                   {onlineFriends.length === 0 && (
                     <div className="text-white/50 text-sm italic">No friends online</div>
@@ -2066,7 +2066,7 @@ const FitnessDashboard: React.FC = () => {
               positions={["bottom"]}
               content={() => (
                 user ? (
-                  <div className="w-56 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm z-[40]">
+                  <div className="w-56 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm z-[99999]">
                     <div className="flex items-center gap-3 mb-3">
                       {user.photoURL ? (
                         <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full" />
@@ -2086,7 +2086,7 @@ const FitnessDashboard: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="w-48 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm text-center z-[40]">
+                  <div className="w-48 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm text-center z-[99999]">
                     <button
                       onClick={() => { setIsProfilePopoverOpen(false); router.push('/auth'); }}
                       className="w-full px-3 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 rounded text-yellow-300 font-semibold transition-all"
