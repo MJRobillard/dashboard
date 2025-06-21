@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { FirebaseProvider } from './contexts/FirebaseContext';
+import { GoogleCalendarProvider } from './contexts/GoogleCalendarContext';
 
 export const metadata: Metadata = {
   title: "Cal Fitness Student Dashboard",
@@ -24,9 +25,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <FirebaseProvider>
-          {children}
-        </FirebaseProvider>
+        <GoogleCalendarProvider>
+          <FirebaseProvider>
+            {children}
+          </FirebaseProvider>
+        </GoogleCalendarProvider>
         <Analytics />
       </body>
     </html>

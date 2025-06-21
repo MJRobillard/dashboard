@@ -1,6 +1,7 @@
 'use client'
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Line,  Doughnut } from 'react-chartjs-2';
+import { Line, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,10 +14,8 @@ import {
   Tooltip,
   Legend,
   ChartOptions,
-
 } from 'chart.js';
-import { DndProvider } from 'react-dnd';
-import { useDrag, useDrop } from 'react-dnd';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import useEmblaCarousel from 'embla-carousel-react';
 import { Popover } from 'react-tiny-popover';
@@ -27,10 +26,19 @@ import {
   FireIcon, 
   UserPlusIcon,
   MagnifyingGlassIcon,
-
   XCircleIcon,
-  Bars4Icon
+  Bars4Icon,
+  Cog6ToothIcon,
+  ChevronUpIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline';
+// Firebase auth helpers
+import { useFirebase } from './contexts/FirebaseContext';
+import { useGoogleCalendar } from './contexts/GoogleCalendarContext';
+import { convertGoogleEventsToCalendarEvents } from './utils/googleCalendar';
+import { useRouter } from 'next/navigation';
+import { GoogleCalendarViews } from './components/GoogleCalendarViews';
+import { PersonalTimeline } from './components/PersonalTimeline';
 
 ChartJS.register(
   CategoryScale,
@@ -76,6 +84,7 @@ interface CalendarEvent {
   location?: string;
   isPersonal?: boolean;
   notes?: string;
+  isGoogleEvent?: boolean;
 }
 
 interface CalendarDayType {
@@ -104,8 +113,6 @@ interface GymFriend {
   workoutCount: number;
   isOnline: boolean;
 }
-
-
 
 const CalendarCarousel: React.FC<{
   children: React.ReactNode;
@@ -230,6 +237,51 @@ const FitnessDashboard: React.FC = () => {
   const [selectedMeter, setSelectedMeter] = useState<'RSF' | 'CMS'>('RSF');
   const [isLoading, setIsLoading] = useState(true);
   const [percentFull, setPercentFull] = useState<number | null>(null);
+
+  // Google Calendar context
+  const { 
+    isAuthenticated: isGCalAuthenticated, 
+    isLoading: isGCalLoading, 
+    tokens: gCalTokens, 
+    calendars, 
+    selectedCalendar, 
+    googleEvents,
+    authenticate: authenticateGCal, 
+    handleAuthCallback, 
+    selectCalendar, 
+    disconnect: disconnectGCal, 
+    refreshTokens: refreshGCalTokens,
+    fetchCalendarEvents,
+    createEvent: createGCalEvent
+  } = useGoogleCalendar();
+
+  // Simple combined events - will be enhanced when Google Calendar is connected
+  const combinedEvents = useMemo(() => {
+    let events = [...personalEvents];
+    
+    // Add Google Calendar events if authenticated and calendar is selected
+    if (isGCalAuthenticated && selectedCalendar && googleEvents.length > 0) {
+      const convertedGoogleEvents = convertGoogleEventsToCalendarEvents(googleEvents);
+      console.log('Combined events:', {
+        personalCount: personalEvents.length,
+        googleCount: googleEvents.length,
+        convertedCount: convertedGoogleEvents.length,
+        totalCount: events.length + convertedGoogleEvents.length,
+        googleEvents: convertedGoogleEvents.map(e => ({ title: e.title, date: e.date, time: e.time }))
+      });
+      events = [...events, ...convertedGoogleEvents];
+    } else {
+      console.log('Google Calendar status:', {
+        isAuthenticated: isGCalAuthenticated,
+        hasSelectedCalendar: !!selectedCalendar,
+        eventsCount: googleEvents.length,
+        isLoading: isGCalLoading
+      });
+    }
+    
+    return events;
+  }, [personalEvents, isGCalAuthenticated, selectedCalendar, googleEvents, isGCalLoading]);
+
   const [gymFriends, setGymFriends] = useState<GymFriend[]>([
     {
       id: '1',
@@ -598,7 +650,7 @@ const FitnessDashboard: React.FC = () => {
     ]
   };
 
-  const lineChartOptions: ChartOptions<'line'> = {
+  const lineChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -615,7 +667,7 @@ const FitnessDashboard: React.FC = () => {
         }
       },
       tooltip: {
-        mode: 'index',
+        mode: 'index' as const,
         intersect: false,
         backgroundColor: 'rgba(17, 24, 39, 0.9)',
         titleColor: '#FDB515',
@@ -672,8 +724,8 @@ const FitnessDashboard: React.FC = () => {
       }
     },
     interaction: {
-      mode: 'nearest',
-      axis: 'x',
+      mode: 'nearest' as const,
+      axis: 'x' as const,
       intersect: false
     }
   };
@@ -700,7 +752,7 @@ const FitnessDashboard: React.FC = () => {
     }]
   };
 
-  const workoutTypeOptions: ChartOptions<'doughnut'> = {
+  const workoutTypeOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -1030,72 +1082,172 @@ const FitnessDashboard: React.FC = () => {
       }
     });
 
-    const addToGoogleCalendar = (event: CalendarEvent) => {
-      const timeStr = event.time || '';
-      let hours = 0;
-      let minutes = 0;
-      
-      const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-      if (timeMatch) {
-        hours = parseInt(timeMatch[1]);
-        minutes = parseInt(timeMatch[2]);
-        const meridiem = timeMatch[3].toUpperCase();
+    const addToGoogleCalendar = async (event: CalendarEvent) => {
+      // If user is not authenticated with Google Calendar, open the Google Calendar page
+      if (!isGCalAuthenticated || !selectedCalendar) {
+        const timeStr = event.time || '';
+        let hours = 0;
+        let minutes = 0;
         
-        if (meridiem === 'PM' && hours < 12) hours += 12;
-        if (meridiem === 'AM' && hours === 12) hours = 0;
-      }
-      
-      const startDate = new Date(event.date);
-      startDate.setHours(hours, minutes, 0, 0);
-      
-      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-      
-      const params = new URLSearchParams({
-        action: 'TEMPLATE',
-        text: event.title,
-        details: event.notes || 'Personal Workout',
-        dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-        location: 'RSF Berkeley'
-      });
+        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (timeMatch) {
+          hours = parseInt(timeMatch[1]);
+          minutes = parseInt(timeMatch[2]);
+          const meridiem = timeMatch[3].toUpperCase();
+          
+          if (meridiem === 'PM' && hours < 12) hours += 12;
+          if (meridiem === 'AM' && hours === 12) hours = 0;
+        }
+        
+        const startDate = new Date(event.date);
+        startDate.setHours(hours, minutes, 0, 0);
+        
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+        
+        const params = new URLSearchParams({
+          action: 'TEMPLATE',
+          text: event.title,
+          details: event.notes || 'Personal Workout',
+          dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+          location: 'RSF Berkeley'
+        });
 
-      window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+        window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+        return;
+      }
+
+      // If user is authenticated, use the API to create the event
+      try {
+        const timeStr = event.time || '';
+        let hours = 0;
+        let minutes = 0;
+        
+        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (timeMatch) {
+          hours = parseInt(timeMatch[1]);
+          minutes = parseInt(timeMatch[2]);
+          const meridiem = timeMatch[3].toUpperCase();
+          
+          if (meridiem === 'PM' && hours < 12) hours += 12;
+          if (meridiem === 'AM' && hours === 12) hours = 0;
+        }
+        
+        const startDate = new Date(event.date);
+        startDate.setHours(hours, minutes, 0, 0);
+        
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+        
+        const result = await createGCalEvent({
+          summary: event.title,
+          description: event.notes || 'Personal Workout',
+          startDateTime: startDate.toISOString(),
+          endDateTime: endDate.toISOString(),
+          location: 'RSF Berkeley'
+        });
+
+        if (result.success) {
+          // Show success message (you could add a toast notification here)
+          console.log('Event added to Google Calendar successfully!');
+          // Optionally refresh the events list
+          await fetchCalendarEvents();
+        } else {
+          console.error('Failed to add event to Google Calendar:', result.error);
+          // Fallback to opening Google Calendar page
+          const params = new URLSearchParams({
+            action: 'TEMPLATE',
+            text: event.title,
+            details: event.notes || 'Personal Workout',
+            dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+            location: 'RSF Berkeley'
+          });
+          window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+        }
+      } catch (error) {
+        console.error('Error adding event to Google Calendar:', error);
+        // Fallback to opening Google Calendar page
+        const timeStr = event.time || '';
+        let hours = 0;
+        let minutes = 0;
+        
+        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (timeMatch) {
+          hours = parseInt(timeMatch[1]);
+          minutes = parseInt(timeMatch[2]);
+          const meridiem = timeMatch[3].toUpperCase();
+          
+          if (meridiem === 'PM' && hours < 12) hours += 12;
+          if (meridiem === 'AM' && hours === 12) hours = 0;
+        }
+        
+        const startDate = new Date(event.date);
+        startDate.setHours(hours, minutes, 0, 0);
+        
+        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+        
+        const params = new URLSearchParams({
+          action: 'TEMPLATE',
+          text: event.title,
+          details: event.notes || 'Personal Workout',
+          dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+          location: 'RSF Berkeley'
+        });
+
+        window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
+      }
     };
+
+    const isGoogleEvent = event.isGoogleEvent || event.type === 'google';
 
     return (
       <div
         ref={preview as unknown as React.LegacyRef<HTMLDivElement>}
-        className={`p-2 rounded-lg text-white text-xs mb-1 transition-all w-full flex items-center bg-gradient-to-br from-slate-700/90 to-slate-800/90 backdrop-blur-sm relative overflow-hidden ${isDragging ? 'opacity-50' : 'hover:opacity-90'} max-h-[46px]`}
+        className={`p-2 rounded-lg text-white text-xs mb-1 transition-all w-full flex items-center backdrop-blur-sm relative overflow-hidden ${isDragging ? 'opacity-50' : 'hover:opacity-90'} max-h-[46px] ${
+          isGoogleEvent 
+            ? 'bg-gradient-to-br from-green-700/90 to-green-800/90' 
+            : 'bg-gradient-to-br from-slate-700/90 to-slate-800/90'
+        }`}
       >
-        <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+        <div className={`absolute inset-0 pointer-events-none ${
+          isGoogleEvent 
+            ? 'bg-gradient-to-tr from-green-300/10 via-transparent to-transparent' 
+            : 'bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent'
+        }`} />
         <div
           ref={drag as unknown as React.LegacyRef<HTMLDivElement>}
           className="cursor-move mr-2 flex-shrink-0 relative z-10 w-8 h-8 sm:w-5 sm:h-5 flex items-center justify-center"
         >
-          <Bars4Icon className="w-8 h-8 sm:w-5 sm:h-5 text-yellow-300" />
+          <Bars4Icon className={`w-8 h-8 sm:w-5 sm:h-5 ${isGoogleEvent ? 'text-green-300' : 'text-yellow-300'}`} />
         </div>
         <div className="flex-1 min-w-0 overflow-hidden relative z-10">
-          <div className="font-semibold truncate max-w-[50px]">{event.title}</div>
+          <div className="font-semibold truncate max-w-[50px] flex items-center gap-1">
+            {isGoogleEvent && <span className="text-green-300 text-[8px]">📅</span>}
+            {event.title}
+          </div>
           {event.notes && <div className="opacity-80 text-[10px] truncate max-w-[110px]">{event.notes}</div>}
         </div>
         <div className="flex gap-1 flex-shrink-0 ml-2 relative z-10">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              addToGoogleCalendar(event);
-            }}
-            className="px-2 py-1 bg-yellow-300/10 hover:bg-yellow-300/20 rounded text-[10px] font-semibold text-yellow-300 transition-colors border border-yellow-300/20 whitespace-nowrap"
-          >
-            GCal
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setPersonalEvents(prev => prev.filter(e => e.id !== event.id));
-            }}
-            className="px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded text-[10px] font-semibold text-red-300 transition-colors border border-red-300/20 whitespace-nowrap"
-          >
-            ✕
-          </button>
+          {!isGoogleEvent && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                addToGoogleCalendar(event);
+              }}
+              className="px-2 py-1 bg-yellow-300/10 hover:bg-yellow-300/20 rounded text-[10px] font-semibold text-yellow-300 transition-colors border border-yellow-300/20 whitespace-nowrap"
+            >
+              GCal
+            </button>
+          )}
+          {!isGoogleEvent && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setPersonalEvents(prev => prev.filter(e => e.id !== event.id));
+              }}
+              className="px-2 py-1 bg-red-500/10 hover:bg-red-500/20 rounded text-[10px] font-semibold text-red-300 transition-colors border border-red-300/20 whitespace-nowrap"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1204,7 +1356,7 @@ const FitnessDashboard: React.FC = () => {
     ]
   };
 
-  const weightChartOptions: ChartOptions<'line'> = {
+  const weightChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -1222,7 +1374,7 @@ const FitnessDashboard: React.FC = () => {
 
       },
       tooltip: {
-        mode: 'index',
+        mode: 'index' as const,
         intersect: false,
         backgroundColor: 'rgba(17, 24, 39, 0.9)',
         titleColor: '#FDB515',
@@ -1279,8 +1431,8 @@ const FitnessDashboard: React.FC = () => {
       }
     },
     interaction: {
-      mode: 'nearest',
-      axis: 'x',
+      mode: 'nearest' as const,
+      axis: 'x' as const,
       intersect: false
     }
   };
@@ -1343,226 +1495,22 @@ const FitnessDashboard: React.FC = () => {
   };
 
   // NEW_COMPONENT_START
+  // PersonalScheduleGrid component replaced with PersonalTimeline
+  /*
   const PersonalScheduleGrid: React.FC<{
     personalEvents: CalendarEvent[];
     setPersonalEvents: React.Dispatch<React.SetStateAction<CalendarEvent[]>>;
-  }> = ({ personalEvents, setPersonalEvents }) => {
-    const timeSlots = useMemo(() => Array.from({ length: 17 }, (_, i) => i + 6), []); // 6 AM – 10 PM
-
-    // Generate the next 7 days starting today
-    const weekDays = useMemo(() => {
-      const today = new Date();
-      return Array.from({ length: 7 }, (_, i) => {
-        const date = new Date(today);
-        date.setDate(today.getDate() + i);
-        const dateStr = date.toISOString().split('T')[0];
-        return {
-          date: dateStr,
-          dayName: date.toLocaleDateString('en', { weekday: 'short' }),
-          isToday: i === 0,
-        };
-      });
-    }, []);
-
-    const formatTimeSlot = (hour: number) => {
-      if (hour === 12) return '12:00 PM';
-      if (hour > 12) return `${hour - 12}:00 PM`;
-      return `${hour}:00 AM`;
-    };
-
-    const getEventHour = (timeStr: string | undefined) => {
-      if (!timeStr) return -1;
-      const match = timeStr.match(/(\d{1,2}):(\d{2})(?:\s*(AM|PM))?/i);
-      if (!match) return -1;
-      let hour = parseInt(match[1]);
-      const meridiem = match[3];
-      if (meridiem) {
-        if (meridiem.toUpperCase() === 'PM' && hour < 12) hour += 12;
-        if (meridiem.toUpperCase() === 'AM' && hour === 12) hour = 0;
-      }
-      return hour;
-    };
-
-    // State for quick add modal
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [tempEvent, setTempEvent] = useState<CalendarEvent>({
-      id: '',
-      date: '',
-      title: '',
-      type: 'personal',
-      time: '',
-      notes: '',
-      isPersonal: true,
-    });
-
-    const openCreateModal = (date: string, hour: number) => {
-      setTempEvent({
-        id: '',
-        date,
-        title: '',
-        type: 'personal',
-        time: `${hour.toString().padStart(2, '0')}:00`,
-        notes: '',
-        isPersonal: true,
-      });
-      setShowAddModal(true);
-    };
-
-    const handleAddEvent = () => {
-      if (tempEvent.title.trim()) {
-        setPersonalEvents((prev) => [
-          ...prev,
-          { ...tempEvent, id: `personal-${Date.now()}` },
-        ]);
-        setShowAddModal(false);
-      }
-    };
-
-    return (
-      <>
-      <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl backdrop-blur-sm overflow-auto max-w-full h-[400px] flex flex-col scrollbar-thin scrollbar-thumb-yellow-300/30 scrollbar-track-transparent">
-        {/* Header */}
-        <div
-          className="grid min-w-max flex-shrink-0 sticky top-0 z-30 bg-[#000000]/80 backdrop-blur-lg"
-          style={{ gridTemplateColumns: '80px repeat(7, minmax(200px, 1fr))' }}
-        >
-          <div className="bg-transparent" />
-          {weekDays.map(({ date, dayName, isToday }) => (
-            <div
-              key={date}
-              className={`p-2 text-center text-sm font-semibold border-b border-yellow-300/20 ${isToday ? 'text-yellow-300' : 'text-white/80'}`}
-            >
-              {dayName}
-              <br />
-              <span className="font-normal text-xs">{new Date(date).toLocaleDateString('en', {
-                month: 'short',
-                day: 'numeric',
-              })}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Scrollable time rows */}
-        <div className="flex-1">
-        {timeSlots.map((hour) => (
-          <div
-            key={hour}
-            className="grid min-w-max border-t border-yellow-300/10 last:border-b border-yellow-300/10"
-            style={{ gridTemplateColumns: '80px repeat(7, minmax(200px, 1fr))' }}
-          >
-            {/* Time label */}
-            <div className="p-2 text-xs text-yellow-300/60 border-r border-yellow-300/20 flex items-start justify-end sticky left-0 bg-[#000000]/80 backdrop-blur-sm z-20">
-              {formatTimeSlot(hour)}
-            </div>
-
-            {/* Day cells */}
-            {weekDays.map((day) => {
-              const [{ isOver }, drop] = useDrop<CalendarEvent, void, { isOver: boolean }>({
-                accept: 'personal-event',
-                drop: (item) => {
-                  setPersonalEvents((prev) =>
-                    prev.map((e) =>
-                      e.id === item.id
-                        ? { ...e, date: day.date, time: formatTimeSlot(hour) }
-                        : e
-                    )
-                  );
-                },
-                collect: (monitor) => ({ isOver: !!monitor.isOver() }),
-              });
-
-              const eventsInCell = personalEvents.filter(
-                (ev) => ev.date === day.date && getEventHour(ev.time) === hour
-              );
-
-              return (
-                <div
-                  key={`${day.date}-${hour}`}
-                  ref={drop as unknown as React.Ref<HTMLDivElement>}
-                  className={`min-h-[50px] p-1 relative ${
-                    isOver ? 'bg-yellow-300/10' : 'bg-transparent'
-                  } border-r border-yellow-300/20`}
-                  onClick={() => {
-                    if (eventsInCell.length === 0) {
-                      openCreateModal(day.date, hour);
-                    }
-                  }}
-                >
-                  {eventsInCell.map((event) => (
-                    <MemoizedPersonalEvent key={event.id} event={event} />
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-        </div>
-      </div>
-
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setShowAddModal(false)}>
-          <div className="bg-slate-800/90 rounded-lg p-4 w-full max-w-[90vw] md:max-w-md border border-yellow-300/20 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-yellow-300">Add Personal Workout</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-yellow-300/75 hover:text-yellow-300">
-                <XCircleIcon className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
-              <div>
-                <label className="block text-sm font-medium text-yellow-300/75 mb-0">Title</label>
-                <input
-                  type="text"
-                  value={tempEvent.title}
-                  onChange={(e) => setTempEvent((prev) => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-700/50 border border-yellow-300/20 rounded-md text-sm text-white"
-                  placeholder="Workout title"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-yellow-300/75 mb-1">Time</label>
-                <input
-                  type="time"
-                  value={tempEvent.time}
-                  onChange={(e) => setTempEvent((prev) => ({ ...prev, time: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-700/50 border border-yellow-300/20 rounded-md text-sm text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-yellow-300/75 mb-1">Notes</label>
-                <textarea
-                  value={tempEvent.notes}
-                  onChange={(e) => setTempEvent((prev) => ({ ...prev, notes: e.target.value }))}
-                  className="w-full px-3 py-1 bg-slate-700/50 border border-yellow-300/20 rounded-md text-sm text-white min-h-[40px] resize-y"
-                  placeholder="Add any notes about your workout..."
-                />
-              </div>
-            </div>
-            <div className="flex justify-end space-x-2 pt-4 mt-4 border-t border-yellow-300/20">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="px-3 py-1.5 text-sm border border-yellow-300/20 text-yellow-300/75 rounded-md hover:bg-yellow-300/10"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddEvent}
-                className="px-3 py-1.5 text-sm bg-yellow-300/10 hover:bg-yellow-300/20 text-yellow-300 rounded-md border border-yellow-300/20"
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      </>
-    );
+    combinedEvents?: CalendarEvent[];
+  }> = ({ personalEvents, setPersonalEvents, combinedEvents = [] }) => {
+    // ... component implementation removed ...
   };
-  // NEW_COMPONENT_END
+  */
 
   // Modal for logging a workout from the Achievements card
   const [showLogModal, setShowLogModal] = useState(false);
+  const [showLayoutConfigModal, setShowLayoutConfigModal] = useState(false);
   const logModalRef = useRef<HTMLDivElement>(null);
+  const layoutModalRef = useRef<HTMLDivElement>(null);
 
   // Close log modal on outside click
   useEffect(() => {
@@ -1581,6 +1529,23 @@ const FitnessDashboard: React.FC = () => {
     };
   }, [showLogModal]);
 
+  // Close layout config modal on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (layoutModalRef.current && !layoutModalRef.current.contains(event.target as Node)) {
+        setShowLayoutConfigModal(false);
+      }
+    };
+
+    if (showLayoutConfigModal) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showLayoutConfigModal]);
+
   // Temporary state for editing goals
   const [tempGoals, setTempGoals] = useState<WorkoutProgress>(workoutProgress);
 
@@ -1590,11 +1555,443 @@ const FitnessDashboard: React.FC = () => {
     }
   }, [showGoalModal, workoutProgress]);
 
+  // ─────────────────────────────────────────
+  // Auth state & conditional rendering
+  const { user, loading, signOut } = useFirebase();
+  const router = useRouter();
+  const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
+  const profileButtonRef = useRef(null);
+
+  // Remove authentication redirect - allow users to view without login
+  // useEffect(() => {
+  //   if (!loading && !user) {
+  //     router.push('/auth');
+  //   }
+  // }, [loading, user, router]);
+  // ─────────────────────────────────────────
+
+  // Replace the existing Google Calendar section with this new implementation
+  const GoogleCalendarSection = () => {
+    if (isGCalAuthenticated && selectedCalendar) {
+      return (
+        <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 md:p-8 backdrop-blur-sm relative overflow-hidden mt-6">
+          <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+          <div className="relative z-10">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-yellow-300 text-xl font-bold">Google Calendar</h3>
+              <div className="flex gap-2">
+                <select
+                  value={selectedCalendar?.id || ''}
+                  onChange={(e) => {
+                    const calendar = calendars.find(cal => cal.id === e.target.value);
+                    if (calendar) selectCalendar(calendar);
+                  }}
+                  className="px-3 py-1 bg-slate-700/50 border border-yellow-300/30 rounded-lg text-sm text-white focus:outline-none focus:border-yellow-300"
+                >
+                  {calendars.map(calendar => (
+                    <option key={calendar.id} value={calendar.id}>
+                      {calendar.summary}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={disconnectGCal}
+                  className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-300/30 rounded-lg text-sm text-red-300 transition-all"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+            {selectedCalendar && (
+              <iframe
+                src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(selectedCalendar.id)}&ctz=America%2FLos_Angeles`}
+                className="w-full h-[500px] rounded-lg border-0"
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 backdrop-blur-sm relative overflow-hidden mt-6 text-center">
+        <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+        <div className="relative z-10 max-w-md mx-auto">
+          <h3 className="text-yellow-300 text-xl font-bold mb-4">Connect Google Calendar</h3>
+          {isGCalLoading ? (
+            <div className="flex flex-col items-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-300 mb-4"></div>
+              <p className="text-white/75">Connecting to Google...</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-white/75 mb-6">Link your Google Calendar to see your events alongside workouts and RSF classes.</p>
+              <button
+                onClick={authenticateGCal}
+                className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400 flex items-center justify-center gap-2 mx-auto"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
+                  />
+                </svg>
+                Connect with Google
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  type CardKey = 'rsfSchedule' | 'crowdMeter' | 'achievements' | 'workoutProgress' | 'workoutType' | 'weightProgress' | 'progressGoals' | 'friends' | 'personalTimeline';
+  interface LayoutItem { key: CardKey; title: string; colSpan: 1 | 2 | 3; minColSpan?: number }
+  const DEFAULT_LAYOUT: LayoutItem[] = [
+    { key: 'rsfSchedule', title: 'RSF Schedule', colSpan: 2, minColSpan: 2 },
+    { key: 'crowdMeter', title: 'Crowd Meter', colSpan: 1 },
+    { key: 'achievements', title: 'Achievements', colSpan: 1 },
+    { key: 'workoutProgress', title: 'Workout Progress', colSpan: 1 },
+    { key: 'workoutType', title: 'Workout Type Distribution', colSpan: 1 },
+    { key: 'weightProgress', title: 'Weight Progress', colSpan: 1 },
+    { key: 'personalTimeline', title: 'Personal Timeline', colSpan: 3, minColSpan: 2 },
+    { key: 'progressGoals', title: 'Progress Goals', colSpan: 3 },
+    { key: 'friends', title: 'Gym Friends', colSpan: 3 },
+  ];
+
+  const mergeWithDefaults = (stored: LayoutItem[]): LayoutItem[] => {
+    const defMap = new Map(DEFAULT_LAYOUT.map(d => [d.key, d]));
+    const seen = new Set<CardKey>();
+    const merged: LayoutItem[] = [];
+
+    // keep stored order
+    stored.forEach(item => {
+      const def = defMap.get(item.key);
+      if (def) {
+        merged.push({ ...def, ...item }); // inherit potential new props
+        seen.add(item.key);
+      }
+    });
+
+    // append any defaults not present in stored
+    DEFAULT_LAYOUT.forEach(def => {
+      if (!seen.has(def.key)) merged.push(def);
+    });
+
+    return merged;
+  };
+
+  const [layoutConfig, setLayoutConfig] = useState<LayoutItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('layoutConfig');
+      if (stored) {
+        try {
+          const parsed: LayoutItem[] = JSON.parse(stored);
+          return mergeWithDefaults(parsed);
+        } catch {}
+      }
+    }
+    return DEFAULT_LAYOUT;
+  });
+
+  // persist config
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('layoutConfig', JSON.stringify(layoutConfig));
+    }
+  }, [layoutConfig]);
+
+  const moveItem = (index: number, direction: -1 | 1) => {
+    setLayoutConfig(prev => {
+      const newArr = [...prev];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= newArr.length) return prev;
+      const [item] = newArr.splice(index, 1);
+      newArr.splice(targetIndex, 0, item);
+      console.log('🚚 moveItem', { from: index, to: targetIndex, result: newArr });
+      return newArr;
+    });
+  };
+
+  const updateColSpan = (key: CardKey, span: 1 | 2 | 3) => {
+    setLayoutConfig(prev => {
+      const updated = prev.map(it => it.key === key ? { ...it, colSpan: span } : it);
+      console.log('📏 updateColSpan', { key, span, result: updated });
+      return updated;
+    });
+  };
+
+  // ───────────── Cards built from layoutConfig ─────────────
+  const RsfScheduleCard = () => (
+    <CalendarCarousel title="RSF Class Schedule" subtitle="Browse and join group fitness classes">
+      {generateCalendarDays().map(day => (
+        <MemoizedCalendarDay key={day.date} {...day} />
+      ))}
+    </CalendarCarousel>
+  );
+
+  const CrowdMeterCard = () => (
+    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden flex flex-col h-full">
+      <div className="absolute inset-0 bg-gradient-to-r from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+      <div className="relative z-10 flex flex-col h-full">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-yellow-300 text-xl font-bold m-0">
+            {METER_CONFIG[selectedMeter].displayName} Crowd Meter
+          </h3>
+          <div className="flex gap-2">
+            {Object.keys(METER_CONFIG).map((key) => (
+              <button
+                key={key}
+                onClick={() => setSelectedMeter(key as MeterKey)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all border shadow-sm ${
+                  selectedMeter === key
+                    ? 'bg-yellow-300 text-blue-950 border-yellow-300'
+                    : 'bg-slate-700/50 text-yellow-300 border-yellow-300/30 hover:bg-yellow-300/10'
+                }`}
+              >
+                {METER_CONFIG[key as MeterKey].displayName}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="relative w-40 h-40 flex items-center justify-center">
+            <svg className="w-full h-full" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="52" fill="none" stroke="#1e293b" strokeWidth="12" />
+              <circle
+                cx="60"
+                cy="60"
+                r="52"
+                fill="none"
+                stroke="#facc15"
+                strokeWidth="12"
+                strokeDasharray={2 * Math.PI * 52}
+                strokeDashoffset={2 * Math.PI * 52 * (1 - (percentFull ?? 0) / 100)}
+                strokeLinecap="round"
+                style={{ transition: 'stroke-dashoffset 0.7s cubic-bezier(.4,2,.6,1)' }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-5xl font-bold text-yellow-300 drop-shadow-lg">
+                {percentFull !== null ? `${percentFull}%` : <span className="text-lg text-white/70">--</span>}
+              </span>
+              <span className="text-white/70 text-lg mt-1">Full</span>
+            </div>
+          </div>
+          <div className="mt-4 text-white/60 text-sm text-center max-w-xs">
+            Live crowd meter for {METER_CONFIG[selectedMeter].displayName}. Data updates automatically.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const AchievementsCard = () => (
+    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+      <div className="relative z-10">
+        <div className="flex justify-between items-start mb-4">
+          <h3 className="text-yellow-300 text-xl font-bold">Achievements</h3>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => setShowLogModal(true)}
+              className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-all"
+            >
+              Log Workout
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {achievements.map((achievement) => (
+            <div
+              key={achievement.id}
+              className={`inline-flex items-center rounded-lg p-3 transition-all ${
+                achievement.unlocked
+                  ? 'bg-gradient-to-br from-yellow-300/20 to-yellow-300/10 border border-yellow-300/40'
+                  : 'bg-blue-900/30 opacity-50'
+              }`}
+            >
+              <div className="text-yellow-300 mr-2">{achievement.icon}</div>
+              <div>
+                <div className="font-semibold text-sm text-white">{achievement.title}</div>
+                <div className="text-xs text-white/75">{achievement.description}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const WorkoutProgressCard = () => (
+    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-yellow-300 text-xl font-bold">Workout Progress</h3>
+      </div>
+      <div className="h-[300px]">
+        <Line data={consistencyChartData} options={lineChartOptions} />
+      </div>
+    </div>
+  );
+
+  const WorkoutTypeCard = () => (
+    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-yellow-300 text-xl font-bold">Workout Type Distribution</h3>
+      </div>
+      <div className="h-[300px]">
+        <Doughnut data={workoutTypeData} options={workoutTypeOptions} />
+      </div>
+    </div>
+  );
+
+  const WeightProgressCard = () => (
+    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-yellow-300 text-xl font-bold">Weight Progress</h3>
+        <button onClick={() => setShowWeightModal(true)} className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400">Update Weight</button>
+      </div>
+      <div className="h-[300px]">
+        <Line data={weightChartData} options={weightChartOptions} />
+      </div>
+    </div>
+  );
+
+  const PersonalTimelineCard = () => {
+    if (!user) {
+      return (
+        <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+          <div className="relative z-10 text-center py-8">
+            <h3 className="text-yellow-300 text-xl font-bold mb-4">Personal Timeline</h3>
+            <p className="text-white/75 mb-6">Sign in to create and manage your personal workout timeline</p>
+            <button
+              onClick={() => router.push('/auth')}
+              className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
+            >
+              Sign In to Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <PersonalTimeline 
+        personalEvents={personalEvents}
+        setPersonalEvents={setPersonalEvents}
+        combinedEvents={combinedEvents}
+        isGCalAuthenticated={isGCalAuthenticated}
+        selectedCalendar={selectedCalendar}
+        googleEvents={googleEvents}
+        authenticateGCal={authenticateGCal}
+        isGCalLoading={isGCalLoading}
+      />
+    );
+  };
+
+  const ProgressGoalsCard = () => {
+    if (!user) {
+      return (
+        <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+          <div className="relative z-10 text-center py-8">
+            <h3 className="text-yellow-300 text-xl font-bold mb-4">Progress Goals</h3>
+            <p className="text-white/75 mb-6">Sign in to track your workout progress and set personal goals</p>
+            <button
+              onClick={() => router.push('/auth')}
+              className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
+            >
+              Sign In to Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-yellow-300 text-xl font-bold">Progress Goals</h3>
+          <button onClick={() => setShowGoalModal(true)} className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400">Adjust Goals</button>
+        </div>
+        <div className="flex flex-col gap-3">
+          {Object.entries(workoutProgress).map(([type, progress]) => {
+            const color = '#FDB515';
+            const workoutCount = workoutData.filter(w => w.completed && w.type === type).length;
+            return (
+              <div key={type} className="flex items-center gap-3">
+                <div className="w-24 capitalize text-white" style={{ color }}>{type}</div>
+                <div className="flex-1">
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-white/75">{workoutCount} workouts completed</span>
+                    <span className="font-medium text-white">{progress as number}%</span>
+                  </div>
+                  <div className="h-2 bg-blue-900/50 rounded-full overflow-hidden">
+                    <div className="h-full transition-all duration-500 ease-out rounded-full" style={{ width: `${progress as number}%`, backgroundColor: color }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const FriendsCard = () => {
+    if (!user) {
+      return (
+        <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+          <div className="relative z-10 text-center py-8">
+            <h3 className="text-yellow-300 text-xl font-bold mb-4">Gym Friends</h3>
+            <p className="text-white/75 mb-6">Sign in to connect with friends and track your social fitness journey</p>
+            <button
+              onClick={() => router.push('/auth')}
+              className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
+            >
+              Sign In to Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <h3 className="text-yellow-300 text-xl font-bold">Gym Friends</h3>
+          <div className="flex gap-2 flex-wrap w-full md:w-auto">
+            <div className="relative w-full md:flex-1">
+              <input type="text" placeholder="Search friends..." value={searchFriends} onChange={e=>setSearchFriends(e.target.value)} className="w-full px-4 py-2 pl-10 bg-blue-900/50 border-2 border-yellow-300/30 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300/50" />
+              <MagnifyingGlassIcon className="w-5 h-5 text-yellow-300/50 absolute left-3 top-1/2 -translate-y-1/2" />
+            </div>
+            <input type="email" className="w-full md:w-auto px-4 py-2 bg-blue-900/50 border-2 border-yellow-300/30 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300/50" placeholder="Friend's email" value={addFriendEmail} onChange={e=>{setAddFriendEmail(e.target.value); setAddFriendError('');}} />
+            <button onClick={handleAddFriend} className="w-full md:w-auto px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-all">Add Friend</button>
+          </div>
+        </div>
+        <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar">
+          {filteredFriends.map(friend => (
+            <div key={friend.id} className="flex items-center gap-3 p-3 bg-blue-900/30 rounded-lg border border-yellow-300/20">
+              <div className="text-yellow-300">{friend.avatar}</div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2"><span className="font-medium text-white">{friend.name}</span><span className={`w-2 h-2 rounded-full ${friend.isOnline?'bg-green-400':'bg-gray-400'}`} /></div>
+                <div className="text-sm text-white">Last workout: {friend.lastWorkout}</div>
+              </div>
+              <div className="text-sm text-white">{friend.workoutCount} workouts</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="min-h-screen bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] text-white">
+      <div className="min-h-screen bg-gradient-to-br z-[-10] from-[#000000] via-[#0b1939] to-[#000000] text-white">
         {/* Header Section */}
-        <div className="flex items-center justify-between mb-6 p-4 md:p-6 rounded-2xl shadow-[0_0_30px_rgba(253,224,71,0.2)] border border-yellow-300/40 sticky top-0 z-30 bg-[#000000]/80 backdrop-blur-lg">
+        <div className="flex items-center justify-between mb-6 p-4 md:p-6 rounded-2xl shadow-[0_0_30px_rgba(253,224,71,0.2)] border border-yellow-300/40 sticky top-0 z-20 bg-[#000000]/80 backdrop-blur-lg">
           <div className="flex items-center gap-4">
             <span className="text-5xl animate-bounce">🐻</span>
             <div>
@@ -1608,7 +2005,7 @@ const FitnessDashboard: React.FC = () => {
               isOpen={isFriendsPopoverOpen}
               positions={["bottom"]}
               content={() => (
-                <div className="w-64 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm">
+                <div className="w-64 bg-slate-800 z-[40] border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm">
                   <div className="text-yellow-300 font-semibold text-sm mb-2">Online Friends</div>
                   {onlineFriends.length === 0 && (
                     <div className="text-white/50 text-sm italic">No friends online</div>
@@ -1655,6 +2052,66 @@ const FitnessDashboard: React.FC = () => {
               )}
             </Popover>
 
+            <button
+              onClick={() => setShowLayoutConfigModal(true)}
+              className="relative flex items-center justify-center w-12 h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
+              aria-label="Layout Settings"
+            >
+              <Cog6ToothIcon className="w-6 h-6 text-yellow-300" />
+            </button>
+
+            {/* Profile / Auth Popover */}
+            <Popover
+              isOpen={isProfilePopoverOpen}
+              positions={["bottom"]}
+              content={() => (
+                user ? (
+                  <div className="w-56 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm z-[40]">
+                    <div className="flex items-center gap-3 mb-3">
+                      {user.photoURL ? (
+                        <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full" />
+                      ) : (
+                        <UserIcon className="w-6 h-6 text-yellow-300" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-yellow-300 truncate">{user.displayName || user.email}</div>
+                        <div className="text-white/60 truncate">{user.email}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { setIsProfilePopoverOpen(false); signOut(); }}
+                      className="w-full px-3 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 rounded text-yellow-300 font-semibold transition-all"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-48 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm text-center z-[40]">
+                    <button
+                      onClick={() => { setIsProfilePopoverOpen(false); router.push('/auth'); }}
+                      className="w-full px-3 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 rounded text-yellow-300 font-semibold transition-all"
+                    >
+                      Sign In
+                    </button>
+                  </div>
+                )
+              )}
+              onClickOutside={() => setIsProfilePopoverOpen(false)}
+            >
+              <button
+                ref={profileButtonRef}
+                onClick={() => setIsProfilePopoverOpen(!isProfilePopoverOpen)}
+                className="relative flex items-center justify-center w-12 h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
+                aria-label="Profile"
+              >
+                {user && user.photoURL ? (
+                  <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full" />
+                ) : (
+                  <UserIcon className="w-6 h-6 text-yellow-300" />
+                )}
+              </button>
+            </Popover>
+
             <div className="text-right">
               <div className="text-sm text-white/75">Today's Date</div>
               <div className="text-2xl font-semibold text-yellow-300">
@@ -1665,359 +2122,40 @@ const FitnessDashboard: React.FC = () => {
         </div>
 
         <div className="mx-auto max-w-6xl px-4">
-          {/* Main Grid Layout */}
+          {/* Main Grid Layout (Dynamic) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* First Row */}
-            {/* RSF Class Schedule - Takes 2 columns */}
-            <div className="md:col-span-2">
-              <CalendarCarousel
-                title="RSF Class Schedule"
-                subtitle="Browse and join group fitness classes"
-              >
-                {generateCalendarDays().map(day => (
-                  <MemoizedCalendarDay key={day.date} {...day} />
-                ))}
-              </CalendarCarousel>
-            </div>
-
-            {/* RSF Crowd Meter - Takes 1 column */}
-            <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden flex flex-col h-full">
-              <div className="absolute inset-0 bg-gradient-to-r from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-              <div className="relative z-10 flex flex-col h-full">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-yellow-300 text-xl font-bold m-0">
-                    {METER_CONFIG[selectedMeter].displayName} Crowd Meter
-                  </h3>
-                  <div className="flex gap-2">
-                    {Object.keys(METER_CONFIG).map((key) => (
-                      <button
-                        key={key}
-                        onClick={() => setSelectedMeter(key as MeterKey)}
-                        className={`px-4 py-2 rounded-full text-sm font-medium transition-all border shadow-sm ${
-                          selectedMeter === key
-                            ? 'bg-yellow-300 text-blue-950 border-yellow-300'
-                            : 'bg-slate-700/50 text-yellow-300 border-yellow-300/30 hover:bg-yellow-300/10'
-                        }`}
-                      >
-                        {METER_CONFIG[key as MeterKey].displayName}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex-1 flex flex-col items-center justify-center">
-                  <div className="relative w-40 h-40 flex items-center justify-center">
-                    <svg className="w-full h-full" viewBox="0 0 120 120">
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="52"
-                        fill="none"
-                        stroke="#1e293b"
-                        strokeWidth="12"
-                      />
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="52"
-                        fill="none"
-                        stroke="#facc15"
-                        strokeWidth="12"
-                        strokeDasharray={2 * Math.PI * 52}
-                        strokeDashoffset={2 * Math.PI * 52 * (1 - (percentFull ?? 0) / 100)}
-                        strokeLinecap="round"
-                        style={{ transition: 'stroke-dashoffset 0.7s cubic-bezier(.4,2,.6,1)' }}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-5xl font-bold text-yellow-300 drop-shadow-lg">
-                        {percentFull !== null ? `${percentFull}%` : <span className="text-lg text-white/70">--</span>}
-                      </span>
-                      <span className="text-white/70 text-lg mt-1">Full</span>
-                    </div>
-                  </div>
-                  <div className="mt-4 text-white/60 text-sm text-center max-w-xs">
-                    Live crowd meter for {METER_CONFIG[selectedMeter].displayName}. Data updates automatically.
-                  </div>
-                </div>
+            {layoutConfig.map((item) => {
+              const spanClass = item.colSpan===3 ? 'md:col-span-3' : item.colSpan===2 ? 'md:col-span-2' : 'md:col-span-1';
+              return <div key={item.key} className={spanClass}>
+                {item.key === 'rsfSchedule' && <RsfScheduleCard />}
+                {item.key === 'crowdMeter' && <CrowdMeterCard />}
+                {item.key === 'achievements' && <AchievementsCard />}
+                {item.key === 'workoutProgress' && <WorkoutProgressCard />}
+                {item.key === 'workoutType' && <WorkoutTypeCard />}
+                {item.key === 'weightProgress' && <WeightProgressCard />}
+                {item.key === 'personalTimeline' && <PersonalTimelineCard />}
+                {item.key === 'progressGoals' && <ProgressGoalsCard />}
+                {item.key === 'friends' && <FriendsCard />}
               </div>
-            </div>
-
-            {/* Second Row */}
-            {/* Personal Schedule - Takes 2 columns */}
-            <div className="md:col-span-2">
-              <PersonalScheduleGrid personalEvents={personalEvents} setPersonalEvents={setPersonalEvents} />
-            </div>
-
-            {/* Achievements - Takes 1 column */}
-            <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-              <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-yellow-300 text-xl font-bold">Achievements</h3>
-                  <div className="flex gap-2 items-center">
-                    <button
-                      onClick={() => setShowLogModal(true)}
-                      className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-all"
-                    >
-                      Log Workout
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {achievements.map(achievement => (
-                    <div
-                      key={achievement.id}
-                      className={`inline-flex items-center rounded-lg p-3 transition-all ${
-                        achievement.unlocked 
-                          ? 'bg-gradient-to-br from-yellow-300/20 to-yellow-300/10 border border-yellow-300/40' 
-                          : 'bg-blue-900/30 opacity-50'
-                      }`}
-                    >
-                      <div className="text-yellow-300 mr-2">{achievement.icon}</div>
-                      <div>
-                        <div className="font-semibold text-sm text-white">{achievement.title}</div>
-                        <div className="text-xs text-white/75">{achievement.description}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            })}
           </div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-            <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-              <div className="relative z-10">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="text-yellow-300 text-xl font-bold">Workout Progress</h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setTimeScale('7d')}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                        timeScale === '7d' 
-                          ? 'bg-yellow-300 text-blue-950' 
-                          : 'bg-blue-900/50 text-white hover:bg-blue-900/70'
-                      }`}
-                    >
-                      7D
-                    </button>
-                    <button
-                      onClick={() => setTimeScale('14d')}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                        timeScale === '14d' 
-                          ? 'bg-yellow-300 text-blue-950' 
-                          : 'bg-blue-900/50 text-white hover:bg-blue-900/70'
-                      }`}
-                    >
-                      14D
-                    </button>
-                    <button
-                      onClick={() => setTimeScale('30d')}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
-                        timeScale === '30d' 
-                          ? 'bg-yellow-300 text-blue-950' 
-                          : 'bg-blue-900/50 text-white hover:bg-blue-900/70'
-                      }`}
-                    >
-                      30D
-                    </button>
-                  </div>
-                </div>
-                <div className="h-[300px]">
-                  <Line data={consistencyChartData} options={lineChartOptions} />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-bl from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-              <div className="relative z-10">
-                <h3 className="text-yellow-300 text-xl font-bold mb-4">Workout Type Distribution</h3>
-                <div className="h-[300px]">
-                  <Doughnut data={workoutTypeData} options={workoutTypeOptions} />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden flex flex-col">
-              <div className="absolute inset-0 bg-gradient-to-r from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-              <div className="relative z-10">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-yellow-300 text-xl font-bold">Weight Progress</h3>
-                  <button
-                    onClick={() => setShowWeightModal(true)}
-                    className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-all"
-                  >
-                    Update Weight
-                  </button>
-                </div>
-                <div className="h-[300px]">
-                  <Line data={weightChartData} options={weightChartOptions} />
-                </div>
-              </div>
-            </div>
+            {/* ... remove everything until friends/progress goals ... */}
           </div>
 
           {/* Progress Goals */}
-          <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 mt-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-yellow-300 text-xl font-bold">Progress Goals</h3>
-              <button
-                onClick={() => setShowGoalModal(true)}
-                className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400"
-              >
-                Adjust Goals
-              </button>
-            </div>
-            <div className="flex flex-col gap-3">
-              {Object.entries(workoutProgress).map(([type, progress]) => {
-                const color = type === 'arms' ? '#FDB515' :
-                             type === 'legs' ? '#FDB515' :
-                             type === 'back' ? '#FDB515' :
-                             type === 'core' ? '#FDB515' :
-                             type === 'chest' ? '#FDB515' :
-                             '#FDB515';
-                const workoutCount = workoutData.filter(w => w.completed && w.type === type).length;
-                return (
-                  <div key={type} className="flex items-center gap-3">
-                    <div className="w-24 capitalize text-white" style={{ color }}>{type}</div>
-                    <div className="flex-1">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-white/75">{workoutCount} workouts completed</span>
-                        <span className="font-medium text-white">{progress}%</span>
-                      </div>
-                      <div className="h-2 bg-blue-900/50 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full transition-all duration-500 ease-out rounded-full"
-                          style={{ 
-                            width: `${progress}%`,
-                            backgroundColor: color
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          {/* ... remove static progress goals section ... */}
 
           {/* Friends */}
-          <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 mt-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-              <h3 className="text-yellow-300 text-xl font-bold">Gym Friends</h3>
-              <div className="flex gap-2 flex-wrap w-full md:w-auto">
-                <div className="relative w-full md:flex-1">
-                  <input
-                    type="text"
-                    placeholder="Search friends..."
-                    value={searchFriends}
-                    onChange={(e) => setSearchFriends(e.target.value)}
-                    className="w-full px-4 py-2 pl-10 bg-blue-900/50 border-2 border-yellow-300/30 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300/50"
-                  />
-                  <MagnifyingGlassIcon className="w-5 h-5 text-yellow-300/50 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                </div>
-                <input
-                  type="email"
-                  className="w-full md:w-auto px-4 py-2 bg-blue-900/50 border-2 border-yellow-300/30 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300/50"
-                  placeholder="Friend's email"
-                  value={addFriendEmail}
-                  onChange={e => { setAddFriendEmail(e.target.value); setAddFriendError(''); }}
-                />
-                <button
-                  onClick={handleAddFriend}
-                  className="w-full md:w-auto px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-all md:whitespace-nowrap"
-                >
-                  Add Friend
-                </button>
-                {addFriendError && <span className="text-red-400 text-xs ml-2">{addFriendError}</span>}
-              </div>
-            </div>
-            <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar">
-              {filteredFriends.map(friend => (
-                <div key={friend.id} className="flex items-center gap-3 p-3 bg-blue-900/30 rounded-lg border border-yellow-300/20 hover:border-yellow-300/50 hover:bg-blue-900/50 hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300">
-                  <div className="text-yellow-300">{friend.avatar}</div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-white">{friend.name}</span>
-                      <span className={`w-2 h-2 rounded-full ${friend.isOnline ? 'bg-green-400' : 'bg-gray-400'}`} />
-                    </div>
-                    <div className="text-sm text-white">
-                      Last workout: {friend.lastWorkout}
-                    </div>
-                  </div>
-                  <div className="text-sm text-white">
-                    {friend.workoutCount} workouts
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* ... remove static friends section ... */}
 
-          {/* Google Calendar */}
-          {googleCalendarID && ready ? (
-            <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 md:p-8 backdrop-blur-sm relative overflow-hidden mt-6">
-              <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-              <div className="relative z-10">
-                <h3 className="text-yellow-300 text-xl font-bold mb-4">Google Calendar</h3>
-                <iframe
-                  src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(googleCalendarID)}&ctz=America%2FLos_Angeles`}
-                  className="w-full h-[500px] rounded-lg border-0"
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 backdrop-blur-sm relative overflow-hidden mt-6 text-center">
-              <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-              <div className="relative z-10 max-w-md mx-auto">
-                <h3 className="text-yellow-300 text-xl font-bold mb-4">Connect Google Calendar</h3>
-                {showGCalInput ? (
-                  <>
-                    <input
-                      type="text"
-                      placeholder="Enter your Google Calendar ID"
-                      value={googleCalendarID}
-                      onChange={(e) => setGoogleCalendarID(e.target.value)}
-                      className="w-full px-4 py-3 bg-blue-950/50 border border-yellow-300/30 rounded-xl text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300 mb-4"
-                    />
-                    <div className="flex justify-center gap-3">
-                      <button
-                        onClick={() => setShowGCalInput(false)}
-                        className="px-6 py-3 text-white/70 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => {
-                          setReady(true);
-                          if (googleCalendarID) setShowGCalInput(false);
-                        }}
-                        className={`px-6 py-3 rounded-xl text-sm font-semibold transition-all ${googleCalendarID ? 'bg-yellow-300 text-blue-950 hover:bg-yellow-400' : 'bg-yellow-300/50 text-blue-950/50 cursor-not-allowed'}`}
-                        disabled={!googleCalendarID}
-                      >
-                        Connect
-                      </button>
-                    </div>
-                    <p className="text-white/60 text-xs mt-4">
-                      You can find your Calendar ID in Google Calendar settings.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-white/75 mb-6">Link your calendar to see your events alongside workouts.</p>
-                    <button
-                      onClick={() => setShowGCalInput(true)}
-                      className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
-                    >
-                      Connect Google Calendar
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Replace the old Google Calendar section with the new component */}
+          <GoogleCalendarSection />
+
+          {/* Enhanced Google Calendar Views */}
+
 
           {/* Motivational Banner */}
           <div className="bg-gradient-to-r from-yellow-400/10 via-yellow-300/5 to-transparent text-yellow-300 border border-yellow-300/20 p-6 md:p-8 rounded-xl text-center text-lg font-semibold mt-6 shadow-[0_0_25px_rgba(253,224,71,0.15)]">
@@ -2177,6 +2315,72 @@ const FitnessDashboard: React.FC = () => {
                   }}
                 >
                   Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Layout Config Modal */}
+      {showLayoutConfigModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div
+            ref={layoutModalRef}
+            className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[480px] relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+            <div className="relative z-10">
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="text-xl font-semibold text-yellow-300">Customize Dashboard Layout</h4>
+                <button onClick={() => setShowLayoutConfigModal(false)} className="text-gray-400 hover:text-yellow-300 transition-colors">✕</button>
+              </div>
+              <p className="text-white/70 mb-4 text-sm">Reorder your cards and set column widths. Columns max at 3, calendar views min at 2 columns.</p>
+              {/* Placeholder for configuration UI */}
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                {layoutConfig.map((item, idx) => (
+                  <div key={item.key} className="flex items-center gap-3 bg-slate-800/40 border border-yellow-300/20 rounded-lg p-3">
+                    <div className="flex-1 text-white text-sm font-medium">{item.title}</div>
+                    <select
+                      value={item.colSpan}
+                      onChange={e => updateColSpan(item.key, Number(e.target.value) as 1|2|3)}
+                      className="px-2 py-1 bg-slate-700/50 border border-yellow-300/20 rounded-md text-sm text-yellow-300 focus:outline-none"
+                    >
+                      {[1,2,3].map(v => (
+                        <option key={v} value={v} disabled={!!(item.minColSpan && v < item.minColSpan)}>{v}</option>
+                      ))}
+                    </select>
+                    <button
+                      disabled={idx===0}
+                      onClick={() => moveItem(idx,-1)}
+                      className={`p-1 rounded-md ${idx===0 ? 'text-gray-500':'text-yellow-300 hover:bg-yellow-300/10'}`}
+                    >
+                      <ChevronUpIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      disabled={idx===layoutConfig.length-1}
+                      onClick={() => moveItem(idx,1)}
+                      className={`p-1 rounded-md ${idx===layoutConfig.length-1 ? 'text-gray-500':'text-yellow-300 hover:bg-yellow-300/10'}`}
+                    >
+                      <ChevronDownIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
+                <button
+                  className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
+                  onClick={() => setShowLayoutConfigModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
+                  onClick={() => {
+                    console.log('✅ Apply layoutConfig', layoutConfig);
+                    setShowLayoutConfigModal(false);
+                  }}
+                >
+                  Apply
                 </button>
               </div>
             </div>
