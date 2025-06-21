@@ -5,14 +5,14 @@ export function middleware(request: NextRequest) {
   const authCookie = request.cookies.get('auth');
   const isAuthPage = request.nextUrl.pathname.startsWith('/auth');
   const isMainPage = request.nextUrl.pathname === '/';
-  const isPublicPage = isMainPage || request.nextUrl.pathname.startsWith('/api');
+  const isPublicPage = isMainPage || isAuthPage || request.nextUrl.pathname.startsWith('/api');
 
   // If trying to access auth page while logged in, redirect to home
   if (isAuthPage && authCookie) {
     return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // Allow access to main page and API routes without authentication
+  // Allow access to main page, auth page, and API routes without authentication
   if (isPublicPage) {
     return NextResponse.next();
   }

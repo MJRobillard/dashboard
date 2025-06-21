@@ -1651,10 +1651,10 @@ const FitnessDashboard: React.FC = () => {
     { key: 'rsfSchedule', title: 'RSF Schedule', colSpan: 2, minColSpan: 2 },
     { key: 'crowdMeter', title: 'Crowd Meter', colSpan: 1 },
     { key: 'achievements', title: 'Achievements', colSpan: 1 },
+    { key: 'personalTimeline', title: 'Personal Timeline', colSpan: 3, minColSpan: 2 },
     { key: 'workoutProgress', title: 'Workout Progress', colSpan: 1 },
     { key: 'workoutType', title: 'Workout Type Distribution', colSpan: 1 },
     { key: 'weightProgress', title: 'Weight Progress', colSpan: 1 },
-    { key: 'personalTimeline', title: 'Personal Timeline', colSpan: 3, minColSpan: 2 },
     { key: 'progressGoals', title: 'Progress Goals', colSpan: 3 },
     { key: 'friends', title: 'Gym Friends', colSpan: 3 },
   ];
