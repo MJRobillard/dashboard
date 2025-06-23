@@ -18,7 +18,7 @@ import {
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import useEmblaCarousel from 'embla-carousel-react';
-import { Popover } from 'react-tiny-popover';
+import { createPortal } from 'react-dom';
 import { 
   UserIcon, 
   TrophyIcon, 
@@ -113,6 +113,82 @@ interface GymFriend {
   workoutCount: number;
   isOnline: boolean;
 }
+
+// Custom Portal-based Popover Component
+interface PortalPopoverProps {
+  isOpen: boolean;
+  children: React.ReactNode;
+  content: React.ReactNode | (() => React.ReactNode);
+  positions?: string[];
+  onClickOutside?: () => void;
+}
+
+const PortalPopover: React.FC<PortalPopoverProps> = ({
+  isOpen,
+  children,
+  content,
+  onClickOutside
+}) => {
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.bottom + window.scrollY + 8,
+        left: rect.left + window.scrollX
+      });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isOpen &&
+        popoverRef.current &&
+        !popoverRef.current.contains(event.target as Node) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(event.target as Node)
+      ) {
+        onClickOutside?.();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, onClickOutside]);
+
+  const contentElement = typeof content === 'function' ? content() : content;
+
+  return (
+    <>
+      <div ref={triggerRef}>
+        {children}
+      </div>
+      {isOpen && typeof window !== 'undefined' && createPortal(
+        <div
+          ref={popoverRef}
+          style={{
+            position: 'absolute',
+            top: position.top,
+            left: position.left,
+            zIndex: 999999
+          }}
+        >
+          {contentElement}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
 
 const CalendarCarousel: React.FC<{
   children: React.ReactNode;
@@ -1991,7 +2067,7 @@ const FitnessDashboard: React.FC = () => {
     <DndProvider backend={HTML5Backend}>
       <div className="min-h-screen bg-gradient-to-br z-[-10] from-[#000000] via-[#0b1939] to-[#000000] text-white">
         {/* Header Section */}
-        <div className="flex items-center justify-between mb-6 p-4 md:p-6 rounded-2xl shadow-[0_0_30px_rgba(253,224,71,0.2)] border border-yellow-300/40 sticky top-0 z-20 bg-[#000000]/80 backdrop-blur-lg">
+        <div className="flex items-center justify-between mb-6 p-4 md:p-6 rounded-2xl shadow-[0_0_30px_rgba(253,224,71,0.2)] border border-yellow-300/40 sticky top-0 z-30 bg-[#000000]/80 backdrop-blur-lg">
           <div className="flex items-center gap-4">
             <span className="text-5xl animate-bounce">🐻</span>
             <div>
@@ -2001,11 +2077,11 @@ const FitnessDashboard: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-6">
-            <Popover
+            <PortalPopover
               isOpen={isFriendsPopoverOpen}
               positions={["bottom"]}
               content={() => (
-                <div className="w-64 bg-slate-800 z-[99999] border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm">
+                <div className="w-64 bg-slate-800 z-[999999] border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm">
                   <div className="text-yellow-300 font-semibold text-sm mb-2">Online Friends</div>
                   {onlineFriends.length === 0 && (
                     <div className="text-white/50 text-sm italic">No friends online</div>
@@ -2050,7 +2126,7 @@ const FitnessDashboard: React.FC = () => {
                   <span className="ml-1 bg-yellow-300 text-blue-950 text-xs font-bold rounded-full px-2 py-0.5 border border-white shadow">{onlineFriendsCount}</span>
                 </button>
               )}
-            </Popover>
+            </PortalPopover>
 
             <button
               onClick={() => setShowLayoutConfigModal(true)}
@@ -2061,12 +2137,12 @@ const FitnessDashboard: React.FC = () => {
             </button>
 
             {/* Profile / Auth Popover */}
-            <Popover
+            <PortalPopover
               isOpen={isProfilePopoverOpen}
               positions={["bottom"]}
               content={() => (
                 user ? (
-                  <div className="w-56 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm z-[99999]">
+                  <div className="w-56 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm z-[999999]">
                     <div className="flex items-center gap-3 mb-3">
                       {user.photoURL ? (
                         <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full" />
@@ -2086,7 +2162,7 @@ const FitnessDashboard: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="w-48 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm text-center z-[99999]">
+                  <div className="w-48 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm text-center z-[999999]">
                     <button
                       onClick={() => { setIsProfilePopoverOpen(false); router.push('/auth'); }}
                       className="w-full px-3 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 rounded text-yellow-300 font-semibold transition-all"
@@ -2110,7 +2186,7 @@ const FitnessDashboard: React.FC = () => {
                   <UserIcon className="w-6 h-6 text-yellow-300" />
                 )}
               </button>
-            </Popover>
+            </PortalPopover>
 
             <div className="text-right">
               <div className="text-sm text-white/75">Today's Date</div>
