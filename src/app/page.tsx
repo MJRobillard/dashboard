@@ -39,6 +39,8 @@ import { convertGoogleEventsToCalendarEvents } from './utils/googleCalendar';
 import { useRouter } from 'next/navigation';
 import { GoogleCalendarViews } from './components/GoogleCalendarViews';
 import { PersonalTimeline } from './components/PersonalTimeline';
+import { db } from './utils/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 ChartJS.register(
   CategoryScale,
@@ -314,6 +316,9 @@ const FitnessDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [percentFull, setPercentFull] = useState<number | null>(null);
 
+  // Access authenticated user early for Firestore persistence
+  const { user, loading, signOut } = useFirebase();
+
   // Google Calendar context
   const { 
     isAuthenticated: isGCalAuthenticated, 
@@ -395,12 +400,12 @@ const FitnessDashboard: React.FC = () => {
   const [selectedWorkoutType, setSelectedWorkoutType] = useState('');
 
   const [workoutProgress, setWorkoutProgress] = useState<WorkoutProgress>({
-    arms: 30,
-    legs: 40,
-    back: 25,
-    core: 35,
-    chest: 45,
-    flexibility: 20
+    arms: -1,
+    legs: -1,
+    back: -1,
+    core: -1,
+    chest: -1,
+    flexibility: -1
   });
 
   const [timeScale, setTimeScale] = useState<'7d' | '14d' | '30d'>('7d');
@@ -419,6 +424,58 @@ const FitnessDashboard: React.FC = () => {
   const [newWeight, setNewWeight] = useState<string>('');
   const [newWeightGoal, setNewWeightGoal] = useState<string>('');
   const weightModalRef = useRef<HTMLDivElement>(null);
+  
+  // 🔥 Firestore sync helpers
+  const hasLoadedUserData = useRef(false);
+
+  // Load user data from Firestore once the user is available
+  useEffect(() => {
+    if (user && !hasLoadedUserData.current) {
+      const loadUserData = async () => {
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const snapshot = await getDoc(userDocRef);
+          if (snapshot.exists()) {
+            const data = snapshot.data() as any;
+            console.log('🔥 Firestore user data:', data);
+            if (data.workoutData) setWorkoutData(data.workoutData);
+            if (data.workoutProgress) setWorkoutProgress(data.workoutProgress);
+            if (data.weightProgress) setWeightProgress(data.weightProgress);
+          } else {
+            console.log('🔥 No existing Firestore document for user');
+          }
+        } catch (err) {
+          console.error('Error loading user workout data', err);
+        } finally {
+          hasLoadedUserData.current = true;
+        }
+      };
+      loadUserData();
+    }
+  }, [user]);
+
+  // Save user data to Firestore whenever it changes (after initial load)
+  useEffect(() => {
+    if (user && hasLoadedUserData.current) {
+      const saveUserData = async () => {
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          await setDoc(
+            userDocRef,
+            {
+              workoutData,
+              workoutProgress,
+              weightProgress,
+            },
+            { merge: true }
+          );
+        } catch (err) {
+          console.error('Error saving user workout data', err);
+        }
+      };
+      saveUserData();
+    }
+  }, [user, workoutData, workoutProgress, weightProgress]);
 
   // Replace with Legal Evergreen theme colors
   const coolGray = '#4B5563';
@@ -501,17 +558,8 @@ const FitnessDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    const workoutTypes = ['arms', 'legs', 'back', 'core', 'chest', 'flexibility'];
-    const mockWorkouts: WorkoutData[] = Array.from({ length: 30 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (29 - i));
-      return {
-        date: date.toISOString().split('T')[0],
-        completed: Math.random() > 0.3,
-        type: workoutTypes[Math.floor(Math.random() * workoutTypes.length)]
-      };
-    });
-    setWorkoutData(mockWorkouts);
+    // Initialize with no workouts; data will be loaded from Firestore when available
+    setWorkoutData([]);
 
     const fetchWeeklyClasses = async () => {
       setIsLoading(true);
@@ -535,8 +583,10 @@ const FitnessDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const completionRate = workoutData.filter(w => w.completed).length / workoutData.length;
-    if (completionRate > 0.8) {
+    const completionRate = workoutData.length === 0 ? 0 : workoutData.filter(w => w.completed).length / workoutData.length;
+    if (workoutData.length === 0) {
+      setMotivationalMessage("Welcome! Start logging workouts to see your progress soar.");
+    } else if (completionRate > 0.8) {
       setMotivationalMessage("🐻 GO BEARS! You're crushing it! Keep up the amazing work!");
     } else if (completionRate > 0.6) {
       setMotivationalMessage("Strong progress Very IMPRESSIVE!!");
@@ -544,6 +594,11 @@ const FitnessDashboard: React.FC = () => {
       setMotivationalMessage("Every journey starts with a single step. Let's go, Bear!");
     }
   }, [workoutData]);
+
+  // Reset Firestore load flag whenever the signed-in user changes
+  useEffect(() => {
+    hasLoadedUserData.current = false;
+  }, [user?.uid]);
 
   const achievements: Achievement[] = [
     { 
@@ -1633,7 +1688,6 @@ const FitnessDashboard: React.FC = () => {
 
   // ─────────────────────────────────────────
   // Auth state & conditional rendering
-  const { user, loading, signOut } = useFirebase();
   const router = useRouter();
   const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
   const profileButtonRef = useRef(null);
@@ -2004,7 +2058,7 @@ const FitnessDashboard: React.FC = () => {
                     <span className="font-medium text-white">{progress as number}%</span>
                   </div>
                   <div className="h-2 bg-blue-900/50 rounded-full overflow-hidden">
-                    <div className="h-full transition-all duration-500 ease-out rounded-full" style={{ width: `${progress as number}%`, backgroundColor: color }} />
+                    <div className="h-full transition-all duration-500 ease-out rounded-full" style={{ width: `${Math.max(0, progress as number)}%`, backgroundColor: color }} />
                   </div>
                 </div>
               </div>
