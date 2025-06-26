@@ -338,7 +338,6 @@ const FitnessDashboard: React.FC = () => {
     disconnect: disconnectGCal, 
     refreshTokens: refreshGCalTokens,
     fetchCalendarEvents,
-    createEvent: createGCalEvent
   } = useGoogleCalendar();
 
   // Simple combined events - will be enhanced when Google Calendar is connected

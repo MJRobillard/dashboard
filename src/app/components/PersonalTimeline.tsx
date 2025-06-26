@@ -43,7 +43,6 @@ export const PersonalTimeline: React.FC<PersonalTimelineProps> = ({
   const { 
     isAuthenticated: isGCalContextAuthenticated, 
     selectedCalendar: contextSelectedCalendar,
-    createEvent: createGCalEvent,
     fetchCalendarEvents
   } = useGoogleCalendar();
 
