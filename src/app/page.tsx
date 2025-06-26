@@ -41,6 +41,14 @@ import { GoogleCalendarViews } from './components/GoogleCalendarViews';
 import { PersonalTimeline } from './components/PersonalTimeline';
 import { db } from './utils/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import AchievementsCard from './components/AchievementsCard';
+import { WorkoutProgressCard, WorkoutTypeCard, ProgressGoalsCard } from './components/WorkoutProgressCards';
+import FriendsCard from './components/FriendsCard';
+import CrowdMeterCard from './components/CrowdMeterCard';
+import RsfScheduleCard from './components/RsfScheduleCard';
+import DashboardLayout from './components/DashboardLayout';
+import { cardRegistry } from './components/cardRegistry';
+import { fitnessDashboardLayout } from './dashboardConfigs/fitness';
 
 ChartJS.register(
   CategoryScale,
@@ -306,11 +314,8 @@ const FitnessDashboard: React.FC = () => {
   const [rsfActivities, setRsfActivities] = useState<CalendarEvent[]>([]);
   const [personalEvents, setPersonalEvents] = useState<CalendarEvent[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
-  const [googleCalendarID, setGoogleCalendarID] = useState('');
-  const [ready, setReady] = useState(false);
   const [showGoalModal, setShowGoalModal] = useState(false);
 
-  const [showGCalInput, setShowGCalInput] = useState(false);
   const [motivationalMessage, setMotivationalMessage] = useState('');
   const [selectedMeter, setSelectedMeter] = useState<'RSF' | 'CMS'>('RSF');
   const [isLoading, setIsLoading] = useState(true);
@@ -600,6 +605,8 @@ const FitnessDashboard: React.FC = () => {
     hasLoadedUserData.current = false;
   }, [user?.uid]);
 
+  // --- Grouped Data and Handlers for Cards ---
+  // Achievements data and handler
   const achievements: Achievement[] = [
     { 
       id: '1', 
@@ -625,6 +632,7 @@ const FitnessDashboard: React.FC = () => {
       unlocked: false 
     }
   ];
+  const handleLogWorkout = () => setShowLogModal(true);
 
   const getTimeScaleDays = () => {
     switch (timeScale) {
@@ -902,20 +910,6 @@ const FitnessDashboard: React.FC = () => {
     }
   };
 
-  const generatePersonalCalendarDays = () => {
-    const days: { date: string; events: CalendarEvent[] }[] = [];
-    const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
-      days.push({
-        date: dateStr,
-        events: personalEvents.filter(e => e.date === dateStr)
-      });
-    }
-    return days;
-  };
 
   const CalendarDay: React.FC<{ 
     date: string; 
@@ -1123,18 +1117,16 @@ const FitnessDashboard: React.FC = () => {
                     {formatTimeSlot(hour)}
                   </div>
                   <div className="flex-1 h-full relative pl-2">
-                    <div className="max-w-[calc(100%-8px)]">
-                      {events
-                        .filter(event => {
-                          if (!event.time) return false;
-                          const [eventHour, period] = event.time.split(' ');
-                          const hourNum = parseInt(eventHour);
-                          return period === 'PM' ? hourNum + 12 === hour : hourNum === hour;
-                        })
-                        .map(event => (
-                          <PersonalEvent key={event.id} event={event} />
-                        ))}
-                    </div>
+                    {events
+                      .filter(event => {
+                        if (!event.time) return false;
+                        const [eventHour, period] = event.time.split(' ');
+                        const hourNum = parseInt(eventHour);
+                        return period === 'PM' ? hourNum + 12 === hour : hourNum === hour;
+                      })
+                      .map(event => (
+                        <PersonalEvent key={event.id} event={event} />
+                      ))}
                   </div>
                 </div>
               ))}
@@ -1213,118 +1205,29 @@ const FitnessDashboard: React.FC = () => {
       }
     });
 
-    const addToGoogleCalendar = async (event: CalendarEvent) => {
-      // If user is not authenticated with Google Calendar, open the Google Calendar page
-      if (!isGCalAuthenticated || !selectedCalendar) {
-        const timeStr = event.time || '';
-        let hours = 0;
-        let minutes = 0;
-        
-        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (timeMatch) {
-          hours = parseInt(timeMatch[1]);
-          minutes = parseInt(timeMatch[2]);
-          const meridiem = timeMatch[3].toUpperCase();
-          
-          if (meridiem === 'PM' && hours < 12) hours += 12;
-          if (meridiem === 'AM' && hours === 12) hours = 0;
-        }
-        
-        const startDate = new Date(event.date);
-        startDate.setHours(hours, minutes, 0, 0);
-        
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        
-        const params = new URLSearchParams({
-          action: 'TEMPLATE',
-          text: event.title,
-          details: event.notes || 'Personal Workout',
-          dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-          location: 'RSF Berkeley'
-        });
-
-        window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
-        return;
+    const addToGoogleCalendar = (event: CalendarEvent) => {
+      const timeStr = event.time || '';
+      let hours = 0;
+      let minutes = 0;
+      const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (timeMatch) {
+        hours = parseInt(timeMatch[1]);
+        minutes = parseInt(timeMatch[2]);
+        const meridiem = timeMatch[3].toUpperCase();
+        if (meridiem === 'PM' && hours < 12) hours += 12;
+        if (meridiem === 'AM' && hours === 12) hours = 0;
       }
-
-      // If user is authenticated, use the API to create the event
-      try {
-        const timeStr = event.time || '';
-        let hours = 0;
-        let minutes = 0;
-        
-        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (timeMatch) {
-          hours = parseInt(timeMatch[1]);
-          minutes = parseInt(timeMatch[2]);
-          const meridiem = timeMatch[3].toUpperCase();
-          
-          if (meridiem === 'PM' && hours < 12) hours += 12;
-          if (meridiem === 'AM' && hours === 12) hours = 0;
-        }
-        
-        const startDate = new Date(event.date);
-        startDate.setHours(hours, minutes, 0, 0);
-        
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        
-        const result = await createGCalEvent({
-          summary: event.title,
-          description: event.notes || 'Personal Workout',
-          startDateTime: startDate.toISOString(),
-          endDateTime: endDate.toISOString(),
-          location: 'RSF Berkeley'
-        });
-
-        if (result.success) {
-          // Show success message (you could add a toast notification here)
-          console.log('Event added to Google Calendar successfully!');
-          // Optionally refresh the events list
-          await fetchCalendarEvents();
-        } else {
-          console.error('Failed to add event to Google Calendar:', result.error);
-          // Fallback to opening Google Calendar page
-          const params = new URLSearchParams({
-            action: 'TEMPLATE',
-            text: event.title,
-            details: event.notes || 'Personal Workout',
-            dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-            location: 'RSF Berkeley'
-          });
-          window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
-        }
-      } catch (error) {
-        console.error('Error adding event to Google Calendar:', error);
-        // Fallback to opening Google Calendar page
-        const timeStr = event.time || '';
-        let hours = 0;
-        let minutes = 0;
-        
-        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (timeMatch) {
-          hours = parseInt(timeMatch[1]);
-          minutes = parseInt(timeMatch[2]);
-          const meridiem = timeMatch[3].toUpperCase();
-          
-          if (meridiem === 'PM' && hours < 12) hours += 12;
-          if (meridiem === 'AM' && hours === 12) hours = 0;
-        }
-        
-        const startDate = new Date(event.date);
-        startDate.setHours(hours, minutes, 0, 0);
-        
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        
-        const params = new URLSearchParams({
-          action: 'TEMPLATE',
-          text: event.title,
-          details: event.notes || 'Personal Workout',
-          dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-          location: 'RSF Berkeley'
-        });
-
-        window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
-      }
+      const startDate = new Date(event.date);
+      startDate.setHours(hours, minutes, 0, 0);
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+      const params = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: event.title,
+        details: event.notes || 'Personal Workout',
+        dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+        location: 'RSF Berkeley'
+      });
+      window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
     };
 
     const isGoogleEvent = event.isGoogleEvent || event.type === 'google';
@@ -1572,22 +1475,17 @@ const FitnessDashboard: React.FC = () => {
     const timeStr = event.time || '';
     let hours = 0;
     let minutes = 0;
-    
     const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (timeMatch) {
       hours = parseInt(timeMatch[1]);
       minutes = parseInt(timeMatch[2]);
       const meridiem = timeMatch[3].toUpperCase();
-      
       if (meridiem === 'PM' && hours < 12) hours += 12;
       if (meridiem === 'AM' && hours === 12) hours = 0;
     }
-    
     const startDate = new Date(event.date);
     startDate.setHours(hours, minutes, 0, 0);
-    
     const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-    
     const params = new URLSearchParams({
       action: 'TEMPLATE',
       text: event.title,
@@ -1595,7 +1493,6 @@ const FitnessDashboard: React.FC = () => {
       dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
       location: 'RSF Berkeley'
     });
-
     window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
   };
 
@@ -1700,136 +1597,77 @@ const FitnessDashboard: React.FC = () => {
   // }, [loading, user, router]);
   // ─────────────────────────────────────────
 
-  // Replace the existing Google Calendar section with this new implementation
-  const GoogleCalendarSection = () => {
-    if (isGCalAuthenticated && selectedCalendar) {
-      return (
-        <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 md:p-8 backdrop-blur-sm relative overflow-hidden mt-6">
-          <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-          <div className="relative z-10">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-yellow-300 text-xl font-bold">Google Calendar</h3>
-              <div className="flex gap-2">
-                <select
-                  value={selectedCalendar?.id || ''}
-                  onChange={(e) => {
-                    const calendar = calendars.find(cal => cal.id === e.target.value);
-                    if (calendar) selectCalendar(calendar);
-                  }}
-                  className="px-3 py-1 bg-slate-700/50 border border-yellow-300/30 rounded-lg text-sm text-white focus:outline-none focus:border-yellow-300"
-                >
-                  {calendars.map(calendar => (
-                    <option key={calendar.id} value={calendar.id}>
-                      {calendar.summary}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={disconnectGCal}
-                  className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-300/30 rounded-lg text-sm text-red-300 transition-all"
-                >
-                  Disconnect
-                </button>
-              </div>
-            </div>
-            {selectedCalendar && (
-              <iframe
-                src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(selectedCalendar.id)}&ctz=America%2FLos_Angeles`}
-                className="w-full h-[500px] rounded-lg border-0"
-              />
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 backdrop-blur-sm relative overflow-hidden mt-6 text-center">
-        <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-        <div className="relative z-10 max-w-md mx-auto">
-          <h3 className="text-yellow-300 text-xl font-bold mb-4">Connect Google Calendar</h3>
-          {isGCalLoading ? (
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-300 mb-4"></div>
-              <p className="text-white/75">Connecting to Google...</p>
-            </div>
-          ) : (
-            <>
-              <p className="text-white/75 mb-6">Link your Google Calendar to see your events alongside workouts and RSF classes.</p>
-              <button
-                onClick={authenticateGCal}
-                className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400 flex items-center justify-center gap-2 mx-auto"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
-                  <path
-                    fill="currentColor"
-                    d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
-                  />
-                </svg>
-                Connect with Google
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    );
+  // Prepare cardProps for each card
+  const cardProps = {
+    rsfSchedule: {
+      generateCalendarDays,
+      MemoizedCalendarDay,
+      CalendarCarousel,
+    },
+    crowdMeter: {
+      percentFull,
+      selectedMeter,
+      setSelectedMeter: (v: string) => setSelectedMeter(v as MeterKey),
+      METER_CONFIG,
+    },
+    achievements: {
+      achievements,
+      onLogWorkout: handleLogWorkout,
+    },
+    workoutProgress: {
+      chartData: consistencyChartData,
+      chartOptions: lineChartOptions,
+    },
+    workoutType: {
+      doughnutData: workoutTypeData,
+      doughnutOptions: workoutTypeOptions,
+    },
+    progressGoals: {
+      workoutProgress,
+      workoutData,
+      onAdjustGoals: () => setShowGoalModal(true),
+      user,
+      router,
+    },
+    friends: {
+      gymFriends,
+      searchFriends,
+      setSearchFriends,
+      addFriendEmail,
+      setAddFriendEmail,
+      addFriendError,
+      setAddFriendError,
+      handleAddFriend,
+      user,
+      router,
+    },
+    weightProgress: {
+      weightChartData,
+      weightChartOptions,
+      onShowWeightModal: () => setShowWeightModal(true),
+    },
+    personalTimeline: {
+      user,
+      personalEvents,
+      setPersonalEvents,
+      combinedEvents,
+      isGCalAuthenticated,
+      selectedCalendar,
+      googleEvents,
+      authenticateGCal,
+      isGCalLoading,
+      router,
+    },
   };
 
-  type CardKey = 'rsfSchedule' | 'crowdMeter' | 'achievements' | 'workoutProgress' | 'workoutType' | 'weightProgress' | 'progressGoals' | 'friends' | 'personalTimeline';
-  interface LayoutItem { key: CardKey; title: string; colSpan: 1 | 2 | 3; minColSpan?: number }
-  const DEFAULT_LAYOUT: LayoutItem[] = [
-    { key: 'rsfSchedule', title: 'RSF Schedule', colSpan: 2, minColSpan: 2 },
-    { key: 'crowdMeter', title: 'Crowd Meter', colSpan: 1 },
-    { key: 'achievements', title: 'Achievements', colSpan: 1 },
-    { key: 'personalTimeline', title: 'Personal Timeline', colSpan: 3, minColSpan: 2 },
-    { key: 'workoutProgress', title: 'Workout Progress', colSpan: 1 },
-    { key: 'workoutType', title: 'Workout Type Distribution', colSpan: 1 },
-    { key: 'weightProgress', title: 'Weight Progress', colSpan: 1 },
-    { key: 'progressGoals', title: 'Progress Goals', colSpan: 3 },
-    { key: 'friends', title: 'Gym Friends', colSpan: 3 },
-  ];
-
-  const mergeWithDefaults = (stored: LayoutItem[]): LayoutItem[] => {
-    const defMap = new Map(DEFAULT_LAYOUT.map(d => [d.key, d]));
-    const seen = new Set<CardKey>();
-    const merged: LayoutItem[] = [];
-
-    // keep stored order
-    stored.forEach(item => {
-      const def = defMap.get(item.key);
-      if (def) {
-        merged.push({ ...def, ...item }); // inherit potential new props
-        seen.add(item.key);
-      }
-    });
-
-    // append any defaults not present in stored
-    DEFAULT_LAYOUT.forEach(def => {
-      if (!seen.has(def.key)) merged.push(def);
-    });
-
-    return merged;
-  };
-
-  const [layoutConfig, setLayoutConfig] = useState<LayoutItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('layoutConfig');
-      if (stored) {
-        try {
-          const parsed: LayoutItem[] = JSON.parse(stored);
-          return mergeWithDefaults(parsed);
-        } catch {}
-      }
-    }
-    return DEFAULT_LAYOUT;
-  });
-
-  // persist config
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('layoutConfig', JSON.stringify(layoutConfig));
-    }
-  }, [layoutConfig]);
+  // Layout customization state and handlers
+  const [layoutConfig, setLayoutConfig] = useState<{ key: string; colSpan: 1|2|3; minColSpan?: number }[]>(() =>
+    fitnessDashboardLayout.map(item => ({
+      key: item.key,
+      colSpan: item.colSpan as 1|2|3,
+      ...(item.minColSpan ? { minColSpan: item.minColSpan } : {})
+    }))
+  );
 
   const moveItem = (index: number, direction: -1 | 1) => {
     setLayoutConfig(prev => {
@@ -1838,282 +1676,13 @@ const FitnessDashboard: React.FC = () => {
       if (targetIndex < 0 || targetIndex >= newArr.length) return prev;
       const [item] = newArr.splice(index, 1);
       newArr.splice(targetIndex, 0, item);
-      console.log('🚚 moveItem', { from: index, to: targetIndex, result: newArr });
       return newArr;
     });
   };
 
-  const updateColSpan = (key: CardKey, span: 1 | 2 | 3) => {
-    setLayoutConfig(prev => {
-      const updated = prev.map(it => it.key === key ? { ...it, colSpan: span } : it);
-      console.log('📏 updateColSpan', { key, span, result: updated });
-      return updated;
-    });
-  };
-
-  // ───────────── Cards built from layoutConfig ─────────────
-  const RsfScheduleCard = () => (
-    <CalendarCarousel title="RSF Class Schedule" subtitle="Browse and join group fitness classes">
-      {generateCalendarDays().map(day => (
-        <MemoizedCalendarDay key={day.date} {...day} />
-      ))}
-    </CalendarCarousel>
-  );
-
-  const CrowdMeterCard = () => (
-    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden flex flex-col h-full">
-      <div className="absolute inset-0 bg-gradient-to-r from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-      <div className="relative z-10 flex flex-col h-full">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-yellow-300 text-xl font-bold m-0">
-            {METER_CONFIG[selectedMeter].displayName} Crowd Meter
-          </h3>
-          <div className="flex gap-2">
-            {Object.keys(METER_CONFIG).map((key) => (
-              <button
-                key={key}
-                onClick={() => setSelectedMeter(key as MeterKey)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all border shadow-sm ${
-                  selectedMeter === key
-                    ? 'bg-yellow-300 text-blue-950 border-yellow-300'
-                    : 'bg-slate-700/50 text-yellow-300 border-yellow-300/30 hover:bg-yellow-300/10'
-                }`}
-              >
-                {METER_CONFIG[key as MeterKey].displayName}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="relative w-40 h-40 flex items-center justify-center">
-            <svg className="w-full h-full" viewBox="0 0 120 120">
-              <circle cx="60" cy="60" r="52" fill="none" stroke="#1e293b" strokeWidth="12" />
-              <circle
-                cx="60"
-                cy="60"
-                r="52"
-                fill="none"
-                stroke="#facc15"
-                strokeWidth="12"
-                strokeDasharray={2 * Math.PI * 52}
-                strokeDashoffset={2 * Math.PI * 52 * (1 - (percentFull ?? 0) / 100)}
-                strokeLinecap="round"
-                style={{ transition: 'stroke-dashoffset 0.7s cubic-bezier(.4,2,.6,1)' }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-5xl font-bold text-yellow-300 drop-shadow-lg">
-                {percentFull !== null ? `${percentFull}%` : <span className="text-lg text-white/70">--</span>}
-              </span>
-              <span className="text-white/70 text-lg mt-1">Full</span>
-            </div>
-          </div>
-          <div className="mt-4 text-white/60 text-sm text-center max-w-xs">
-            Live crowd meter for {METER_CONFIG[selectedMeter].displayName}. Data updates automatically.
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const AchievementsCard = () => (
-    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-tr from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-      <div className="relative z-10">
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="text-yellow-300 text-xl font-bold">Achievements</h3>
-          <div className="flex gap-2 items-center">
-            <button
-              onClick={() => setShowLogModal(true)}
-              className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-all"
-            >
-              Log Workout
-            </button>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {achievements.map((achievement) => (
-            <div
-              key={achievement.id}
-              className={`inline-flex items-center rounded-lg p-3 transition-all ${
-                achievement.unlocked
-                  ? 'bg-gradient-to-br from-yellow-300/20 to-yellow-300/10 border border-yellow-300/40'
-                  : 'bg-blue-900/30 opacity-50'
-              }`}
-            >
-              <div className="text-yellow-300 mr-2">{achievement.icon}</div>
-              <div>
-                <div className="font-semibold text-sm text-white">{achievement.title}</div>
-                <div className="text-xs text-white/75">{achievement.description}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const WorkoutProgressCard = () => (
-    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-yellow-300 text-xl font-bold">Workout Progress</h3>
-      </div>
-      <div className="h-[300px]">
-        <Line data={consistencyChartData} options={lineChartOptions} />
-      </div>
-    </div>
-  );
-
-  const WorkoutTypeCard = () => (
-    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-yellow-300 text-xl font-bold">Workout Type Distribution</h3>
-      </div>
-      <div className="h-[300px]">
-        <Doughnut data={workoutTypeData} options={workoutTypeOptions} />
-      </div>
-    </div>
-  );
-
-  const WeightProgressCard = () => (
-    <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-yellow-300 text-xl font-bold">Weight Progress</h3>
-        <button onClick={() => setShowWeightModal(true)} className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400">Update Weight</button>
-      </div>
-      <div className="h-[300px]">
-        <Line data={weightChartData} options={weightChartOptions} />
-      </div>
-    </div>
-  );
-
-  const PersonalTimelineCard = () => {
-    if (!user) {
-      return (
-        <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-          <div className="relative z-10 text-center py-8">
-            <h3 className="text-yellow-300 text-xl font-bold mb-4">Personal Timeline</h3>
-            <p className="text-white/75 mb-6">Sign in to create and manage your personal workout timeline</p>
-            <button
-              onClick={() => router.push('/auth')}
-              className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
-            >
-              Sign In to Continue
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <PersonalTimeline 
-        personalEvents={personalEvents}
-        setPersonalEvents={setPersonalEvents}
-        combinedEvents={combinedEvents}
-        isGCalAuthenticated={isGCalAuthenticated}
-        selectedCalendar={selectedCalendar}
-        googleEvents={googleEvents}
-        authenticateGCal={authenticateGCal}
-        isGCalLoading={isGCalLoading}
-      />
-    );
-  };
-
-  const ProgressGoalsCard = () => {
-    if (!user) {
-      return (
-        <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-          <div className="relative z-10 text-center py-8">
-            <h3 className="text-yellow-300 text-xl font-bold mb-4">Progress Goals</h3>
-            <p className="text-white/75 mb-6">Sign in to track your workout progress and set personal goals</p>
-            <button
-              onClick={() => router.push('/auth')}
-              className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
-            >
-              Sign In to Continue
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-yellow-300 text-xl font-bold">Progress Goals</h3>
-          <button onClick={() => setShowGoalModal(true)} className="px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400">Adjust Goals</button>
-        </div>
-        <div className="flex flex-col gap-3">
-          {Object.entries(workoutProgress).map(([type, progress]) => {
-            const color = '#FDB515';
-            const workoutCount = workoutData.filter(w => w.completed && w.type === type).length;
-            return (
-              <div key={type} className="flex items-center gap-3">
-                <div className="w-24 capitalize text-white" style={{ color }}>{type}</div>
-                <div className="flex-1">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-white/75">{workoutCount} workouts completed</span>
-                    <span className="font-medium text-white">{progress as number}%</span>
-                  </div>
-                  <div className="h-2 bg-blue-900/50 rounded-full overflow-hidden">
-                    <div className="h-full transition-all duration-500 ease-out rounded-full" style={{ width: `${Math.max(0, progress as number)}%`, backgroundColor: color }} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const FriendsCard = () => {
-    if (!user) {
-      return (
-        <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6 backdrop-blur-sm relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-          <div className="relative z-10 text-center py-8">
-            <h3 className="text-yellow-300 text-xl font-bold mb-4">Gym Friends</h3>
-            <p className="text-white/75 mb-6">Sign in to connect with friends and track your social fitness journey</p>
-            <button
-              onClick={() => router.push('/auth')}
-              className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
-            >
-              Sign In to Continue
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-          <h3 className="text-yellow-300 text-xl font-bold">Gym Friends</h3>
-          <div className="flex gap-2 flex-wrap w-full md:w-auto">
-            <div className="relative w-full md:flex-1">
-              <input type="text" placeholder="Search friends..." value={searchFriends} onChange={e=>setSearchFriends(e.target.value)} className="w-full px-4 py-2 pl-10 bg-blue-900/50 border-2 border-yellow-300/30 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300/50" />
-              <MagnifyingGlassIcon className="w-5 h-5 text-yellow-300/50 absolute left-3 top-1/2 -translate-y-1/2" />
-            </div>
-            <input type="email" className="w-full md:w-auto px-4 py-2 bg-blue-900/50 border-2 border-yellow-300/30 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300/50" placeholder="Friend's email" value={addFriendEmail} onChange={e=>{setAddFriendEmail(e.target.value); setAddFriendError('');}} />
-            <button onClick={handleAddFriend} className="w-full md:w-auto px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-all">Add Friend</button>
-          </div>
-        </div>
-        <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar">
-          {filteredFriends.map(friend => (
-            <div key={friend.id} className="flex items-center gap-3 p-3 bg-blue-900/30 rounded-lg border border-yellow-300/20">
-              <div className="text-yellow-300">{friend.avatar}</div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2"><span className="font-medium text-white">{friend.name}</span><span className={`w-2 h-2 rounded-full ${friend.isOnline?'bg-green-400':'bg-gray-400'}`} /></div>
-                <div className="text-sm text-white">Last workout: {friend.lastWorkout}</div>
-              </div>
-              <div className="text-sm text-white">{friend.workoutCount} workouts</div>
-            </div>
-          ))}
-        </div>
-      </div>
+  const updateColSpan = (key: string, span: 1 | 2 | 3) => {
+    setLayoutConfig(prev =>
+      prev.map(it => it.key === key ? { ...it, colSpan: span } : it)
     );
   };
 
@@ -2121,16 +1690,28 @@ const FitnessDashboard: React.FC = () => {
     <DndProvider backend={HTML5Backend}>
       <div className="min-h-screen bg-gradient-to-br z-[-10] from-[#000000] via-[#0b1939] to-[#000000] text-white">
         {/* Header Section */}
-        <div className="flex items-center justify-between mb-6 p-4 md:p-6 rounded-2xl shadow-[0_0_30px_rgba(253,224,71,0.2)] border border-yellow-300/40 sticky top-0 z-30 bg-[#000000]/80 backdrop-blur-lg">
-          <div className="flex items-center gap-4">
-            <span className="text-5xl animate-bounce">🐻</span>
-            <div>
-              <h1 className="m-0 text-yellow-300 text-3xl font-bold">Fitness Tracker</h1>
-              <p className="mt-1 text-white/75 text-base">Track your fitness journey</p>
+        <div className="flex flex-col sm:flex-row items-center sm:items-center justify-between mb-6 p-3 sm:p-4 md:p-6 rounded-2xl shadow-[0_0_30px_rgba(253,224,71,0.2)] border border-yellow-300/40 bg-[#000000]/80 backdrop-blur-lg gap-3 sm:gap-0">
+          {/* Logo/Title/Date */}
+          <div className="flex flex-col items-center sm:items-start w-full sm:w-auto">
+            <div className="flex flex-row items-center gap-2 sm:gap-4 w-full justify-center sm:justify-start">
+              <span className="text-3xl sm:text-5xl animate-bounce">🐻</span>
+              <div className="flex flex-col items-center sm:items-start">
+                <h1 className="m-0 text-yellow-300 text-xl sm:text-3xl font-bold leading-tight text-center sm:text-left">Fitness Tracker</h1>
+                <p className="mt-1 text-white/75 text-sm sm:text-base text-center sm:text-left">Track your fitness journey</p>
+              </div>
+            </div>
+            {/* Date below title on mobile */}
+            <div className="mt-2 sm:hidden flex flex-col items-center w-full">
+              <div className="text-xs text-white/75">Today's Date</div>
+              <div className="text-lg font-semibold text-yellow-300">
+                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-6">
+        </div>
+        {/* Sticky Action Buttons */}
+        <div className="sticky top-0 z-40 flex justify-center sm:justify-end w-full px-2 sm:px-6 pt-2 pointer-events-none">
+          <div className="flex flex-row items-center gap-2 sm:gap-4 bg-[#000000]/80 border border-yellow-300/30 rounded-full shadow-lg px-2 py-1 sm:px-4 sm:py-2 backdrop-blur-md pointer-events-auto">
             <PortalPopover
               isOpen={isFriendsPopoverOpen}
               positions={["bottom"]}
@@ -2155,36 +1736,22 @@ const FitnessDashboard: React.FC = () => {
               )}
               onClickOutside={() => setIsFriendsPopoverOpen(false)}
             >
-              {isMobile ? (
-                <button
-                  ref={friendsButtonRef}
-                  onClick={() => setIsFriendsPopoverOpen(!isFriendsPopoverOpen)}
-                  className="relative flex items-center justify-center w-12 h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
-                  aria-label="Friends"
-                >
-                  <svg className="w-6 h-6 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-5a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                  <span className="absolute -top-1 -right-1 bg-yellow-300 text-blue-950 text-xs font-bold rounded-full px-1.5 py-0.5 border border-white shadow">{onlineFriendsCount}</span>
-                </button>
-              ) : (
-                <button
-                  ref={friendsButtonRef}
-                  onClick={() => setIsFriendsPopoverOpen(!isFriendsPopoverOpen)}
-                  className="flex items-center gap-2 px-4 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 border border-yellow-300/40 rounded-full text-yellow-300 font-medium text-sm shadow transition-all"
-                >
-                  <svg className="w-5 h-5 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-5a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                  <span>Friends</span>
-                  <span className="ml-1 bg-yellow-300 text-blue-950 text-xs font-bold rounded-full px-2 py-0.5 border border-white shadow">{onlineFriendsCount}</span>
-                </button>
-              )}
+              <button
+                ref={friendsButtonRef}
+                onClick={() => setIsFriendsPopoverOpen(!isFriendsPopoverOpen)}
+                className="relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
+                aria-label="Friends"
+              >
+                <svg className="w-6 h-6 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-5a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span className="absolute -top-1 -right-1 bg-yellow-300 text-blue-950 text-xs font-bold rounded-full px-1.5 py-0.5 border border-white shadow">{onlineFriendsCount}</span>
+              </button>
             </PortalPopover>
 
             <button
               onClick={() => setShowLayoutConfigModal(true)}
-              className="relative flex items-center justify-center w-12 h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
+              className="relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
               aria-label="Layout Settings"
             >
               <Cog6ToothIcon className="w-6 h-6 text-yellow-300" />
@@ -2231,7 +1798,7 @@ const FitnessDashboard: React.FC = () => {
               <button
                 ref={profileButtonRef}
                 onClick={() => setIsProfilePopoverOpen(!isProfilePopoverOpen)}
-                className="relative flex items-center justify-center w-12 h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
+                className="relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
                 aria-label="Profile"
               >
                 {user && user.photoURL ? (
@@ -2241,10 +1808,10 @@ const FitnessDashboard: React.FC = () => {
                 )}
               </button>
             </PortalPopover>
-
-            <div className="text-right">
-              <div className="text-sm text-white/75">Today's Date</div>
-              <div className="text-2xl font-semibold text-yellow-300">
+            {/* Date on desktop (hidden on mobile) */}
+            <div className="hidden sm:flex flex-col items-end ml-4">
+              <div className="text-xs sm:text-sm text-white/75">Today's Date</div>
+              <div className="text-lg sm:text-2xl font-semibold text-yellow-300">
                 {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </div>
             </div>
@@ -2253,23 +1820,7 @@ const FitnessDashboard: React.FC = () => {
 
         <div className="mx-auto max-w-6xl px-4">
           {/* Main Grid Layout (Dynamic) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {layoutConfig.map((item) => {
-              const spanClass = item.colSpan===3 ? 'md:col-span-3' : item.colSpan===2 ? 'md:col-span-2' : 'md:col-span-1';
-              return <div key={item.key} className={spanClass}>
-                {item.key === 'rsfSchedule' && <RsfScheduleCard />}
-                {item.key === 'crowdMeter' && <CrowdMeterCard />}
-                {item.key === 'achievements' && <AchievementsCard />}
-                {item.key === 'workoutProgress' && <WorkoutProgressCard />}
-                {item.key === 'workoutType' && <WorkoutTypeCard />}
-                {item.key === 'weightProgress' && <WeightProgressCard />}
-                {item.key === 'personalTimeline' && <PersonalTimelineCard />}
-                {item.key === 'progressGoals' && <ProgressGoalsCard />}
-                {item.key === 'friends' && <FriendsCard />}
-              </div>
-            })}
-          </div>
-
+          <DashboardLayout layout={layoutConfig} registry={cardRegistry} cardProps={cardProps} />
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
             {/* ... remove everything until friends/progress goals ... */}
@@ -2282,7 +1833,6 @@ const FitnessDashboard: React.FC = () => {
           {/* ... remove static friends section ... */}
 
           {/* Replace the old Google Calendar section with the new component */}
-          <GoogleCalendarSection />
 
           {/* Enhanced Google Calendar Views */}
 
@@ -2292,231 +1842,229 @@ const FitnessDashboard: React.FC = () => {
             {motivationalMessage}
           </div>
         </div>
-      </div>
-      {showWeightModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div ref={weightModalRef} className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[480px] relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6">
-                <h4 className="text-xl font-semibold text-yellow-300">Update Weight</h4>
-                <button
-                  onClick={() => setShowWeightModal(false)}
-                  className="text-gray-400 hover:text-yellow-300 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-white/75 mb-1">
-                    Current Weight (lbs)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="Enter your current weight"
-                    className="w-full px-4 py-3 bg-blue-950/50 border border-yellow-300/30 rounded-xl text-white text-sm transition-all focus:border-yellow-300 focus:outline-none placeholder:text-white/50"
-                    value={newWeight}
-                    onChange={(e) => setNewWeight(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-white/75 mb-1">
-                    Goal Weight (lbs)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="Enter your goal weight"
-                    className="w-full px-4 py-3 bg-blue-950/50 border border-yellow-300/30 rounded-xl text-white text-sm transition-all focus:border-yellow-300 focus:outline-none placeholder:text-white/50"
-                    value={newWeightGoal}
-                    onChange={(e) => setNewWeightGoal(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
-                <button
-                  className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
-                  onClick={() => setShowWeightModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
-                  onClick={updateWeight}
-                >
-                  Update Weight
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Log Workout Modal */}
-      {showLogModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div ref={logModalRef} className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[400px] relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6">
-                <h4 className="text-xl font-semibold text-yellow-300">Log Workout</h4>
-                <button onClick={() => setShowLogModal(false)} className="text-gray-400 hover:text-yellow-300 transition-colors">✕</button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-white/75 mb-1">Workout Type</label>
-                  <select
-                    value={selectedWorkoutType}
-                    onChange={(e) => setSelectedWorkoutType(e.target.value)}
-                    className="w-full px-4 py-3 bg-blue-950/50 border border-yellow-300/30 rounded-xl text-white text-sm transition-all focus:border-yellow-300 focus:outline-none"
+        {showWeightModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div ref={weightModalRef} className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[480px] relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-6">
+                  <h4 className="text-xl font-semibold text-yellow-300">Update Weight</h4>
+                  <button
+                    onClick={() => setShowWeightModal(false)}
+                    className="text-gray-400 hover:text-yellow-300 transition-colors"
                   >
-                    <option value="">Select workout type...</option>
-                    <option value="arms">Arms</option>
-                    <option value="legs">Legs</option>
-                    <option value="back">Back</option>
-                    <option value="core">Core</option>
-                    <option value="chest">Chest</option>
-                    <option value="flexibility">Flexibility</option>
-                  </select>
+                    ✕
+                  </button>
                 </div>
-              </div>
-              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
-                <button
-                  className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
-                  onClick={() => setShowLogModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={!selectedWorkoutType}
-                  className={`${selectedWorkoutType ? 'bg-yellow-300 text-blue-950 hover:bg-yellow-400' : 'bg-yellow-300/50 text-blue-950/50 cursor-not-allowed'} px-6 py-3 rounded-xl text-sm font-semibold transition-all`}
-                  onClick={() => {
-                    if (selectedWorkoutType) {
-                      updateProgress(selectedWorkoutType);
-                      setSelectedWorkoutType('');
-                      setShowLogModal(false);
-                    }
-                  }}
-                >
-                  Log
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Adjust Goals Modal */}
-      {showGoalModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div ref={goalModalRef} className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[480px] relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6">
-                <h4 className="text-xl font-semibold text-yellow-300">Adjust Goals</h4>
-                <button onClick={() => setShowGoalModal(false)} className="text-gray-400 hover:text-yellow-300 transition-colors">✕</button>
-              </div>
-              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                {Object.keys(tempGoals).map((key) => (
-                  <div key={key} className="flex items-center gap-4">
-                    <label className="capitalize w-24 text-sm text-white/80">{key}</label>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white/75 mb-1">
+                      Current Weight (lbs)
+                    </label>
                     <input
                       type="number"
-                      min="0"
-                      max="100"
-                      value={(tempGoals as any)[key]}
-                      onChange={(e) => setTempGoals((prev) => ({ ...prev, [key]: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
-                      className="flex-1 px-3 py-2 bg-blue-950/50 border border-yellow-300/30 rounded-md text-sm text-white"
+                      placeholder="Enter your current weight"
+                      className="w-full px-4 py-3 bg-blue-950/50 border border-yellow-300/30 rounded-xl text-white text-sm transition-all focus:border-yellow-300 focus:outline-none placeholder:text-white/50"
+                      value={newWeight}
+                      onChange={(e) => setNewWeight(e.target.value)}
                     />
-                    <span className="text-white/60 text-sm">%</span>
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
-                <button
-                  className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
-                  onClick={() => setShowGoalModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
-                  onClick={() => {
-                    setWorkoutProgress(tempGoals);
-                    setShowGoalModal(false);
-                  }}
-                >
-                  Save
-                </button>
+                  <div>
+                    <label className="block text-sm font-medium text-white/75 mb-1">
+                      Goal Weight (lbs)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Enter your goal weight"
+                      className="w-full px-4 py-3 bg-blue-950/50 border border-yellow-300/30 rounded-xl text-white text-sm transition-all focus:border-yellow-300 focus:outline-none placeholder:text-white/50"
+                      value={newWeightGoal}
+                      onChange={(e) => setNewWeightGoal(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
+                  <button
+                    className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
+                    onClick={() => setShowWeightModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
+                    onClick={updateWeight}
+                  >
+                    Update Weight
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-      {/* Layout Config Modal */}
-      {showLayoutConfigModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
-          <div
-            ref={layoutModalRef}
-            className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[480px] relative overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-6">
-                <h4 className="text-xl font-semibold text-yellow-300">Customize Dashboard Layout</h4>
-                <button onClick={() => setShowLayoutConfigModal(false)} className="text-gray-400 hover:text-yellow-300 transition-colors">✕</button>
-              </div>
-              <p className="text-white/70 mb-4 text-sm">Reorder your cards and set column widths. Columns max at 3, calendar views min at 2 columns.</p>
-              {/* Placeholder for configuration UI */}
-              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                {layoutConfig.map((item, idx) => (
-                  <div key={item.key} className="flex items-center gap-3 bg-slate-800/40 border border-yellow-300/20 rounded-lg p-3">
-                    <div className="flex-1 text-white text-sm font-medium">{item.title}</div>
+        )}
+        {/* Log Workout Modal */}
+        {showLogModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div ref={logModalRef} className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[400px] relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-6">
+                  <h4 className="text-xl font-semibold text-yellow-300">Log Workout</h4>
+                  <button onClick={() => setShowLogModal(false)} className="text-gray-400 hover:text-yellow-300 transition-colors">✕</button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-white/75 mb-1">Workout Type</label>
                     <select
-                      value={item.colSpan}
-                      onChange={e => updateColSpan(item.key, Number(e.target.value) as 1|2|3)}
-                      className="px-2 py-1 bg-slate-700/50 border border-yellow-300/20 rounded-md text-sm text-yellow-300 focus:outline-none"
+                      value={selectedWorkoutType}
+                      onChange={(e) => setSelectedWorkoutType(e.target.value)}
+                      className="w-full px-4 py-3 bg-blue-950/50 border border-yellow-300/30 rounded-xl text-white text-sm transition-all focus:border-yellow-300 focus:outline-none"
                     >
-                      {[1,2,3].map(v => (
-                        <option key={v} value={v} disabled={!!(item.minColSpan && v < item.minColSpan)}>{v}</option>
-                      ))}
+                      <option value="">Select workout type...</option>
+                      <option value="arms">Arms</option>
+                      <option value="legs">Legs</option>
+                      <option value="back">Back</option>
+                      <option value="core">Core</option>
+                      <option value="chest">Chest</option>
+                      <option value="flexibility">Flexibility</option>
                     </select>
-                    <button
-                      disabled={idx===0}
-                      onClick={() => moveItem(idx,-1)}
-                      className={`p-1 rounded-md ${idx===0 ? 'text-gray-500':'text-yellow-300 hover:bg-yellow-300/10'}`}
-                    >
-                      <ChevronUpIcon className="w-4 h-4" />
-                    </button>
-                    <button
-                      disabled={idx===layoutConfig.length-1}
-                      onClick={() => moveItem(idx,1)}
-                      className={`p-1 rounded-md ${idx===layoutConfig.length-1 ? 'text-gray-500':'text-yellow-300 hover:bg-yellow-300/10'}`}
-                    >
-                      <ChevronDownIcon className="w-4 h-4" />
-                    </button>
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
-                <button
-                  className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
-                  onClick={() => setShowLayoutConfigModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
-                  onClick={() => {
-                    console.log('✅ Apply layoutConfig', layoutConfig);
-                    setShowLayoutConfigModal(false);
-                  }}
-                >
-                  Apply
-                </button>
+                </div>
+                <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
+                  <button
+                    className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
+                    onClick={() => setShowLogModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!selectedWorkoutType}
+                    className={`${selectedWorkoutType ? 'bg-yellow-300 text-blue-950 hover:bg-yellow-400' : 'bg-yellow-300/50 text-blue-950/50 cursor-not-allowed'} px-6 py-3 rounded-xl text-sm font-semibold transition-all`}
+                    onClick={() => {
+                      if (selectedWorkoutType) {
+                        updateProgress(selectedWorkoutType);
+                        setSelectedWorkoutType('');
+                        setShowLogModal(false);
+                      }
+                    }}
+                  >
+                    Log
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+        {/* Adjust Goals Modal */}
+        {showGoalModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div ref={goalModalRef} className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[480px] relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-6">
+                  <h4 className="text-xl font-semibold text-yellow-300">Adjust Goals</h4>
+                  <button onClick={() => setShowGoalModal(false)} className="text-gray-400 hover:text-yellow-300 transition-colors">✕</button>
+                </div>
+                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                  {Object.keys(tempGoals).map((key) => (
+                    <div key={key} className="flex items-center gap-4">
+                      <label className="capitalize w-24 text-sm text-white/80">{key}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={(tempGoals as any)[key]}
+                        onChange={(e) => setTempGoals((prev) => ({ ...prev, [key]: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) }))}
+                        className="flex-1 px-3 py-2 bg-blue-950/50 border border-yellow-300/30 rounded-md text-sm text-white"
+                      />
+                      <span className="text-white/60 text-sm">%</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
+                  <button
+                    className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
+                    onClick={() => setShowGoalModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
+                    onClick={() => {
+                      setWorkoutProgress(tempGoals);
+                      setShowGoalModal(false);
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Layout Config Modal */}
+        {showLayoutConfigModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div
+              ref={layoutModalRef}
+              className="bg-gradient-to-br from-blue-950 via-slate-900 to-blue-800 border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-8 w-[480px] relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-b from-yellow-300/10 via-transparent to-transparent pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-6">
+                  <h4 className="text-xl font-semibold text-yellow-300">Customize Dashboard Layout</h4>
+                  <button onClick={() => setShowLayoutConfigModal(false)} className="text-gray-400 hover:text-yellow-300 transition-colors">✕</button>
+                </div>
+                <p className="text-white/70 mb-4 text-sm">Reorder your cards and set column widths. Columns max at 3, calendar views min at 2 columns.</p>
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                  {layoutConfig.map((item, idx) => (
+                    <div key={item.key} className="flex items-center gap-3 bg-slate-800/40 border border-yellow-300/20 rounded-lg p-3">
+                      <div className="flex-1 text-white text-sm font-medium">{item.key}</div>
+                      <select
+                        value={item.colSpan}
+                        onChange={e => updateColSpan(item.key, Number(e.target.value) as 1|2|3)}
+                        className="px-2 py-1 bg-slate-700/50 border border-yellow-300/20 rounded-md text-sm text-yellow-300 focus:outline-none"
+                      >
+                        {[1,2,3].map(v => (
+                          <option key={v} value={v} disabled={!!(item.minColSpan && v < item.minColSpan)}>{v}</option>
+                        ))}
+                      </select>
+                      <button
+                        disabled={idx===0}
+                        onClick={() => moveItem(idx,-1)}
+                        className={`p-1 rounded-md ${idx===0 ? 'text-gray-500':'text-yellow-300 hover:bg-yellow-300/10'}`}
+                      >
+                        <ChevronUpIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        disabled={idx===layoutConfig.length-1}
+                        onClick={() => moveItem(idx,1)}
+                        className={`p-1 rounded-md ${idx===layoutConfig.length-1 ? 'text-gray-500':'text-yellow-300 hover:bg-yellow-300/10'}`}
+                      >
+                        <ChevronDownIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-yellow-300/30">
+                  <button
+                    className="px-6 py-3 text-white/75 hover:text-yellow-300 rounded-xl text-sm border border-yellow-300/20 min-w-0"
+                    onClick={() => setShowLayoutConfigModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-6 py-3 bg-yellow-300 text-blue-950 rounded-xl text-sm font-semibold transition-all hover:bg-yellow-400"
+                    onClick={() => {
+                      setShowLayoutConfigModal(false);
+                    }}
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </DndProvider>
   );
 };

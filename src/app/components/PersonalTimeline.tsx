@@ -144,120 +144,30 @@ export const PersonalTimeline: React.FC<PersonalTimelineProps> = ({
     const isGoogleEvent = event.isGoogleEvent;
     const isPersonal = event.isPersonal;
 
-    const addToGoogleCalendar = async (event: CalendarEvent) => {
-      // If user is not authenticated with Google Calendar, open the Google Calendar page
-      if (!isAuthenticated || !selectedCal) {
-        const timeStr = event.time || '';
-        let hours = 0;
-        let minutes = 0;
-        
-        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (timeMatch) {
-          hours = parseInt(timeMatch[1]);
-          minutes = parseInt(timeMatch[2]);
-          const meridiem = timeMatch[3].toUpperCase();
-          
-          if (meridiem === 'PM' && hours < 12) hours += 12;
-          if (meridiem === 'AM' && hours === 12) hours = 0;
-        }
-        
-        const startDate = new Date(event.date);
-        startDate.setHours(hours, minutes, 0, 0);
-        
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        
-        const params = new URLSearchParams({
-          action: 'TEMPLATE',
-          text: event.title,
-          details: event.notes || 'Personal Event',
-          dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-          location: 'Personal Event'
-        });
-
-        window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
-        return;
+    const addToGoogleCalendar = (event: CalendarEvent) => {
+      // Always use the Google Calendar URL method, regardless of authentication
+      const timeStr = event.time || '';
+      let hours = 0;
+      let minutes = 0;
+      const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (timeMatch) {
+        hours = parseInt(timeMatch[1]);
+        minutes = parseInt(timeMatch[2]);
+        const meridiem = timeMatch[3].toUpperCase();
+        if (meridiem === 'PM' && hours < 12) hours += 12;
+        if (meridiem === 'AM' && hours === 12) hours = 0;
       }
-
-      // If user is authenticated, use the API to create the event
-      try {
-        const timeStr = event.time || '';
-        let hours = 0;
-        let minutes = 0;
-        
-        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (timeMatch) {
-          hours = parseInt(timeMatch[1]);
-          minutes = parseInt(timeMatch[2]);
-          const meridiem = timeMatch[3].toUpperCase();
-          
-          if (meridiem === 'PM' && hours < 12) hours += 12;
-          if (meridiem === 'AM' && hours === 12) hours = 0;
-        }
-        
-        const startDate = new Date(event.date);
-        startDate.setHours(hours, minutes, 0, 0);
-        
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        
-        const result = await createGCalEvent({
-          summary: event.title,
-          description: event.notes || 'Personal Event',
-          startDateTime: startDate.toISOString(),
-          endDateTime: endDate.toISOString(),
-          location: 'Personal Event'
-        });
-
-        if (result.success) {
-          // Show success message (you could add a toast notification here)
-          console.log('Event added to Google Calendar successfully!');
-          // Optionally refresh the events list
-          if (fetchCalendarEvents) {
-            await fetchCalendarEvents();
-          }
-        } else {
-          console.error('Failed to add event to Google Calendar:', result.error);
-          // Fallback to opening Google Calendar page
-          const params = new URLSearchParams({
-            action: 'TEMPLATE',
-            text: event.title,
-            details: event.notes || 'Personal Event',
-            dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-            location: 'Personal Event'
-          });
-          window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
-        }
-      } catch (error) {
-        console.error('Error adding event to Google Calendar:', error);
-        // Fallback to opening Google Calendar page
-        const timeStr = event.time || '';
-        let hours = 0;
-        let minutes = 0;
-        
-        const timeMatch = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
-        if (timeMatch) {
-          hours = parseInt(timeMatch[1]);
-          minutes = parseInt(timeMatch[2]);
-          const meridiem = timeMatch[3].toUpperCase();
-          
-          if (meridiem === 'PM' && hours < 12) hours += 12;
-          if (meridiem === 'AM' && hours === 12) hours = 0;
-        }
-        
-        const startDate = new Date(event.date);
-        startDate.setHours(hours, minutes, 0, 0);
-        
-        const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        
-        const params = new URLSearchParams({
-          action: 'TEMPLATE',
-          text: event.title,
-          details: event.notes || 'Personal Event',
-          dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
-          location: 'Personal Event'
-        });
-
-        window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
-      }
+      const startDate = new Date(event.date);
+      startDate.setHours(hours, minutes, 0, 0);
+      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+      const params = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: event.title,
+        details: event.notes || 'Personal Event',
+        dates: `${startDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z/${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+        location: 'Personal Event'
+      });
+      window.open(`https://calendar.google.com/calendar/render?${params.toString()}`, '_blank');
     };
 
     return (

@@ -55,13 +55,6 @@ interface GoogleCalendarContextType {
   disconnect: () => Promise<void>;
   refreshTokens: () => Promise<void>;
   fetchCalendarEvents: (timeMin?: string, timeMax?: string) => Promise<void>;
-  createEvent: (eventData: {
-    summary: string;
-    description?: string;
-    startDateTime: string;
-    endDateTime: string;
-    location?: string;
-  }) => Promise<{ success: boolean; event?: any; error?: string }>;
 }
 
 const GoogleCalendarContext = createContext<GoogleCalendarContextType>({
@@ -77,7 +70,6 @@ const GoogleCalendarContext = createContext<GoogleCalendarContextType>({
   disconnect: async () => {},
   refreshTokens: async () => {},
   fetchCalendarEvents: async () => {},
-  createEvent: async () => ({ success: false }),
 });
 
 export const useGoogleCalendar = () => useContext(GoogleCalendarContext);
@@ -448,49 +440,6 @@ export const GoogleCalendarProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, [isAuthenticated, selectedCalendar, tokens, fetchCalendarEvents, isLoading]);
 
-  const createEvent = useCallback(async (eventData: {
-    summary: string;
-    description?: string;
-    startDateTime: string;
-    endDateTime: string;
-    location?: string;
-  }) => {
-    if (!selectedCalendar || !tokens?.access_token) {
-      return { success: false };
-    }
-
-    try {
-      const response = await fetch('/api/google-calendar/create-event', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...eventData,
-          accessToken: tokens.access_token,
-          calendarId: selectedCalendar.id,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          console.log('Event created successfully');
-          return { success: true, event: data.event };
-        } else {
-          console.error('Failed to create event:', data.error);
-          return { success: false, error: data.error };
-        }
-      } else {
-        console.error('Error creating event:', response.status, response.statusText);
-        return { success: false };
-      }
-    } catch (error) {
-      console.error('Error creating event:', error);
-      return { success: false };
-    }
-  }, [selectedCalendar, tokens]);
-
   const value: GoogleCalendarContextType = {
     isAuthenticated,
     isLoading,
@@ -504,7 +453,6 @@ export const GoogleCalendarProvider: React.FC<{ children: React.ReactNode }> = (
     disconnect,
     refreshTokens,
     fetchCalendarEvents,
-    createEvent,
   };
 
   return (
