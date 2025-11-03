@@ -41,6 +41,8 @@ import { GoogleCalendarViews } from './components/GoogleCalendarViews';
 import { PersonalTimeline } from './components/PersonalTimeline';
 import { db } from './utils/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { GymFriends } from './components/GymFriends';
+import { RSFOccupancyAnalysis } from './components/RSFOccupancyAnalysis';
 
 ChartJS.register(
   CategoryScale,
@@ -410,15 +412,11 @@ const FitnessDashboard: React.FC = () => {
 
   const [timeScale, setTimeScale] = useState<'7d' | '14d' | '30d'>('7d');
 
+  // Update initial state to always start at 0 if no data
   const [weightProgress, setWeightProgress] = useState<WeightProgress>({
-    current: 150,
-    goal: 160,
-    history: [
-      { date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: 145 },
-      { date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: 147 },
-      { date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], weight: 148 },
-      { date: new Date().toISOString().split('T')[0], weight: 150 }
-    ]
+    current: 0,
+    goal: 0,
+    history: [{ date: new Date().toISOString().split('T')[0], weight: 0 }],
   });
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [newWeight, setNewWeight] = useState<string>('');
@@ -440,9 +438,21 @@ const FitnessDashboard: React.FC = () => {
             console.log('🔥 Firestore user data:', data);
             if (data.workoutData) setWorkoutData(data.workoutData);
             if (data.workoutProgress) setWorkoutProgress(data.workoutProgress);
-            if (data.weightProgress) setWeightProgress(data.weightProgress);
+            let loadedWeightProgress = data.weightProgress || {};
+            // Ensure history always starts at 0
+            if (!loadedWeightProgress.history || loadedWeightProgress.history.length === 0) {
+              loadedWeightProgress.history = [{ date: new Date().toISOString().split('T')[0], weight: 0 }];
+              loadedWeightProgress.current = 0;
+              loadedWeightProgress.goal = 0;
+            } else if (loadedWeightProgress.history[0].weight !== 0) {
+              loadedWeightProgress.history = [
+                { date: loadedWeightProgress.history[0].date, weight: 0 },
+                ...loadedWeightProgress.history
+              ];
+            }
+            setWeightProgress(loadedWeightProgress);
           } else {
-            console.log('🔥 No existing Firestore document for user');
+            setWeightProgress({ current: 0, goal: 0, history: [{ date: new Date().toISOString().split('T')[0], weight: 0 }] });
           }
         } catch (err) {
           console.error('Error loading user workout data', err);
@@ -465,7 +475,7 @@ const FitnessDashboard: React.FC = () => {
             {
               workoutData,
               workoutProgress,
-              weightProgress,
+              weightProgress, // This now always includes updated goal weight
             },
             { merge: true }
           );
@@ -1442,34 +1452,45 @@ const FitnessDashboard: React.FC = () => {
     };
   }, [showGoalModal]);
 
+  // In updateWeight, always ensure history starts at 0
   const updateWeight = () => {
-    if (newWeight) {
-      const weight = parseFloat(newWeight);
-      setWeightProgress(prev => ({
-        ...prev,
-        current: weight,
-        history: [...prev.history, { date: new Date().toISOString().split('T')[0], weight }]
-      }));
-    }
-    if (newWeightGoal) {
-      setWeightProgress(prev => ({
-        ...prev,
-        goal: parseFloat(newWeightGoal)
-      }));
-    }
+    setWeightProgress(prev => {
+      let newHistory = prev.history;
+      if (newHistory.length === 0 || newHistory[0].weight !== 0) {
+        newHistory = [{ date: new Date().toISOString().split('T')[0], weight: 0 }, ...newHistory];
+      }
+      if (newWeight) {
+        const weight = parseFloat(newWeight);
+        newHistory = [...newHistory, { date: new Date().toISOString().split('T')[0], weight }];
+        return {
+          ...prev,
+          current: weight,
+          history: newHistory
+        };
+      }
+      if (newWeightGoal) {
+        return {
+          ...prev,
+          goal: parseFloat(newWeightGoal),
+          history: newHistory
+        };
+      }
+      return { ...prev, history: newHistory };
+    });
     setNewWeight('');
     setNewWeightGoal('');
     setShowWeightModal(false);
   };
 
+  // In weightChartData, always start with 0
   const weightChartData = {
     labels: weightProgress.history.map(w => new Date(w.date).toLocaleDateString('en', { month: 'short', day: 'numeric' })),
     datasets: [
       {
         label: 'Current Weight',
         data: weightProgress.history.map(w => w.weight),
-        borderColor: '#FDB515', // Cal Gold
-        backgroundColor: 'rgba(253, 181, 21, 0.2)', // Cal Gold with opacity
+        borderColor: '#FDB515',
+        backgroundColor: 'rgba(253, 181, 21, 0.2)',
         tension: 0.4,
         borderWidth: 2,
         fill: true
@@ -1477,8 +1498,8 @@ const FitnessDashboard: React.FC = () => {
       {
         label: 'Goal Weight',
         data: Array(weightProgress.history.length).fill(weightProgress.goal),
-        borderColor: '#00A0DC', // Berkeley Blue
-        backgroundColor: 'rgba(0, 160, 220, 0.1)', // Berkeley Blue with opacity
+        borderColor: '#00A0DC',
+        backgroundColor: 'rgba(0, 160, 220, 0.1)',
         borderDash: [5, 5],
         tension: 0,
         borderWidth: 2,
@@ -1775,13 +1796,14 @@ const FitnessDashboard: React.FC = () => {
     );
   };
 
-  type CardKey = 'rsfSchedule' | 'crowdMeter' | 'achievements' | 'workoutProgress' | 'workoutType' | 'weightProgress' | 'progressGoals' | 'friends' | 'personalTimeline';
+  type CardKey = 'rsfSchedule' | 'crowdMeter' | 'achievements' | 'workoutProgress' | 'workoutType' | 'weightProgress' | 'progressGoals' | 'friends' | 'personalTimeline' | 'rsfOccupancy';
   interface LayoutItem { key: CardKey; title: string; colSpan: 1 | 2 | 3; minColSpan?: number }
   const DEFAULT_LAYOUT: LayoutItem[] = [
     { key: 'rsfSchedule', title: 'RSF Schedule', colSpan: 2, minColSpan: 2 },
     { key: 'crowdMeter', title: 'Crowd Meter', colSpan: 1 },
     { key: 'achievements', title: 'Achievements', colSpan: 1 },
     { key: 'personalTimeline', title: 'Personal Timeline', colSpan: 3, minColSpan: 2 },
+    { key: 'rsfOccupancy', title: 'RSF Occupancy Analysis', colSpan: 3, minColSpan: 2 },
     { key: 'workoutProgress', title: 'Workout Progress', colSpan: 1 },
     { key: 'workoutType', title: 'Workout Type Distribution', colSpan: 1 },
     { key: 'weightProgress', title: 'Weight Progress', colSpan: 1 },
@@ -2089,48 +2111,30 @@ const FitnessDashboard: React.FC = () => {
     }
 
     return (
-      <div className="bg-gradient-to-br from-[#000000] via-[#0b1939] to-[#000000] border border-yellow-300/30 shadow-[inset_0_0_15px_rgba(253,224,71,0.05),0_0_25px_rgba(253,224,71,0.1)] rounded-2xl p-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-          <h3 className="text-yellow-300 text-xl font-bold">Gym Friends</h3>
-          <div className="flex gap-2 flex-wrap w-full md:w-auto">
-            <div className="relative w-full md:flex-1">
-              <input type="text" placeholder="Search friends..." value={searchFriends} onChange={e=>setSearchFriends(e.target.value)} className="w-full px-4 py-2 pl-10 bg-blue-900/50 border-2 border-yellow-300/30 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300/50" />
-              <MagnifyingGlassIcon className="w-5 h-5 text-yellow-300/50 absolute left-3 top-1/2 -translate-y-1/2" />
-            </div>
-            <input type="email" className="w-full md:w-auto px-4 py-2 bg-blue-900/50 border-2 border-yellow-300/30 rounded-lg text-sm text-white placeholder-white/50 focus:outline-none focus:border-yellow-300/50" placeholder="Friend's email" value={addFriendEmail} onChange={e=>{setAddFriendEmail(e.target.value); setAddFriendError('');}} />
-            <button onClick={handleAddFriend} className="w-full md:w-auto px-4 py-2 bg-yellow-300 text-blue-950 rounded-lg text-sm font-semibold hover:bg-yellow-400 transition-all">Add Friend</button>
-          </div>
-        </div>
-        <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar">
-          {filteredFriends.map(friend => (
-            <div key={friend.id} className="flex items-center gap-3 p-3 bg-blue-900/30 rounded-lg border border-yellow-300/20">
-              <div className="text-yellow-300">{friend.avatar}</div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2"><span className="font-medium text-white">{friend.name}</span><span className={`w-2 h-2 rounded-full ${friend.isOnline?'bg-green-400':'bg-gray-400'}`} /></div>
-                <div className="text-sm text-white">Last workout: {friend.lastWorkout}</div>
-              </div>
-              <div className="text-sm text-white">{friend.workoutCount} workouts</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <GymFriends 
+        workoutData={workoutData}
+        onWorkoutShared={() => {
+          // Optionally refresh data when workout is shared
+          console.log('Workout shared with friends!');
+        }}
+      />
     );
   };
 
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="min-h-screen bg-gradient-to-br z-[-10] from-[#000000] via-[#0b1939] to-[#000000] text-white">
-        {/* Header Section */}
-        <div className="flex items-center justify-between mb-6 p-4 md:p-6 rounded-2xl shadow-[0_0_30px_rgba(253,224,71,0.2)] border border-yellow-300/40 sticky top-0 z-30 bg-[#000000]/80 backdrop-blur-lg">
+        {/* Top Header - Simplified for mobile, full for desktop */}
+        <div className="hidden md:flex items-center justify-between mb-6 p-4 lg:p-6 rounded-2xl shadow-[0_0_30px_rgba(253,224,71,0.2)] border border-yellow-300/40 sticky top-0 z-30 bg-[#000000]/80 backdrop-blur-lg">
           <div className="flex items-center gap-4">
-            <span className="text-5xl animate-bounce">🐻</span>
+            <span className="text-4xl lg:text-5xl animate-bounce">🐻</span>
             <div>
-              <h1 className="m-0 text-yellow-300 text-3xl font-bold">Fitness Tracker</h1>
-              <p className="mt-1 text-white/75 text-base">Track your fitness journey</p>
+              <h1 className="m-0 text-yellow-300 text-2xl lg:text-3xl font-bold">Fitness Tracker</h1>
+              <p className="mt-1 text-white/75 text-sm lg:text-base">Track your fitness journey</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 lg:gap-6">
             <PortalPopover
               isOpen={isFriendsPopoverOpen}
               positions={["bottom"]}
@@ -2155,31 +2159,17 @@ const FitnessDashboard: React.FC = () => {
               )}
               onClickOutside={() => setIsFriendsPopoverOpen(false)}
             >
-              {isMobile ? (
-                <button
-                  ref={friendsButtonRef}
-                  onClick={() => setIsFriendsPopoverOpen(!isFriendsPopoverOpen)}
-                  className="relative flex items-center justify-center w-12 h-12 rounded-full bg-yellow-300/10 border border-yellow-300/40 hover:bg-yellow-300/20 transition-all shadow-md"
-                  aria-label="Friends"
-                >
-                  <svg className="w-6 h-6 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-5a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                  <span className="absolute -top-1 -right-1 bg-yellow-300 text-blue-950 text-xs font-bold rounded-full px-1.5 py-0.5 border border-white shadow">{onlineFriendsCount}</span>
-                </button>
-              ) : (
-                <button
-                  ref={friendsButtonRef}
-                  onClick={() => setIsFriendsPopoverOpen(!isFriendsPopoverOpen)}
-                  className="flex items-center gap-2 px-4 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 border border-yellow-300/40 rounded-full text-yellow-300 font-medium text-sm shadow transition-all"
-                >
-                  <svg className="w-5 h-5 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-5a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                  <span>Friends</span>
-                  <span className="ml-1 bg-yellow-300 text-blue-950 text-xs font-bold rounded-full px-2 py-0.5 border border-white shadow">{onlineFriendsCount}</span>
-                </button>
-              )}
+              <button
+                ref={friendsButtonRef}
+                onClick={() => setIsFriendsPopoverOpen(!isFriendsPopoverOpen)}
+                className="flex items-center gap-2 px-4 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 border border-yellow-300/40 rounded-full text-yellow-300 font-medium text-sm shadow transition-all"
+              >
+                <svg className="w-5 h-5 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-5a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span>Friends</span>
+                <span className="ml-1 bg-yellow-300 text-blue-950 text-xs font-bold rounded-full px-2 py-0.5 border border-white shadow">{onlineFriendsCount}</span>
+              </button>
             </PortalPopover>
 
             <button
@@ -2190,7 +2180,6 @@ const FitnessDashboard: React.FC = () => {
               <Cog6ToothIcon className="w-6 h-6 text-yellow-300" />
             </button>
 
-            {/* Profile / Auth Popover */}
             <PortalPopover
               isOpen={isProfilePopoverOpen}
               positions={["bottom"]}
@@ -2244,16 +2233,148 @@ const FitnessDashboard: React.FC = () => {
 
             <div className="text-right">
               <div className="text-sm text-white/75">Today's Date</div>
-              <div className="text-2xl font-semibold text-yellow-300">
+              <div className="text-xl lg:text-2xl font-semibold text-yellow-300">
                 {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mx-auto max-w-6xl px-4">
+        {/* Mobile Top Bar - Simple */}
+        <div className="md:hidden flex items-center justify-between mb-4 p-3 rounded-2xl border border-yellow-300/40 sticky top-0 z-30 bg-[#000000]/80 backdrop-blur-lg">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl animate-bounce">🐻</span>
+            <h1 className="m-0 text-yellow-300 text-lg font-bold">Fitness Tracker</h1>
+          </div>
+          <div className="text-xs text-white/75">
+            {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </div>
+        </div>
+
+        {/* Bottom Navigation - Mobile Only */}
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#000000]/95 backdrop-blur-lg border-t border-yellow-300/40 shadow-[0_-10px_30px_rgba(253,224,71,0.15)]">
+          <div className="flex items-center justify-around px-2 py-2 max-w-screen-lg mx-auto">
+            {/* Home Button */}
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all active:bg-yellow-300/10"
+              aria-label="Home"
+            >
+              <svg className="w-6 h-6 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              <span className="text-xs text-yellow-300 font-medium">Home</span>
+            </button>
+
+            {/* Friends Button */}
+            <PortalPopover
+              isOpen={isFriendsPopoverOpen}
+              positions={["top"]}
+              content={() => (
+                <div className="w-64 bg-slate-800 z-[999999] border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm mb-2">
+                  <div className="text-yellow-300 font-semibold text-sm mb-2">Online Friends</div>
+                  {onlineFriends.length === 0 && (
+                    <div className="text-white/50 text-sm italic">No friends online</div>
+                  )}
+                  <ul className="space-y-2 max-h-64 overflow-y-auto">
+                    {onlineFriends.map(friend => (
+                      <li key={friend.id} className="flex items-center gap-3 text-white text-sm">
+                        <div className="text-yellow-300">{friend.avatar}</div>
+                        <div>
+                          <div className="font-medium">{friend.name}</div>
+                          <div className="text-xs text-white/50">Last: {friend.lastWorkout}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              onClickOutside={() => setIsFriendsPopoverOpen(false)}
+            >
+              <button
+                ref={friendsButtonRef}
+                onClick={() => setIsFriendsPopoverOpen(!isFriendsPopoverOpen)}
+                className="relative flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all active:bg-yellow-300/10"
+                aria-label="Friends"
+              >
+                <svg className="w-6 h-6 text-yellow-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-5a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span className="text-xs text-yellow-300 font-medium">Friends</span>
+                {onlineFriendsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-yellow-300 text-blue-950 text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center border border-white shadow">{onlineFriendsCount}</span>
+                )}
+              </button>
+            </PortalPopover>
+
+            {/* Layout/Settings Button */}
+            <button
+              onClick={() => setShowLayoutConfigModal(true)}
+              className="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all active:bg-yellow-300/10"
+              aria-label="Settings"
+            >
+              <Cog6ToothIcon className="w-6 h-6 text-yellow-300" />
+              <span className="text-xs text-yellow-300 font-medium">Settings</span>
+            </button>
+
+            {/* Profile Button */}
+            <PortalPopover
+              isOpen={isProfilePopoverOpen}
+              positions={["top"]}
+              content={() => (
+                user ? (
+                  <div className="w-56 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm z-[999999] mb-2">
+                    <div className="flex items-center gap-3 mb-3">
+                      {user.photoURL ? (
+                        <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full" />
+                      ) : (
+                        <UserIcon className="w-6 h-6 text-yellow-300" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-yellow-300 truncate">{user.displayName || user.email}</div>
+                        <div className="text-white/60 truncate text-xs">{user.email}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { setIsProfilePopoverOpen(false); signOut(); }}
+                      className="w-full px-3 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 rounded text-yellow-300 font-semibold transition-all"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-48 bg-slate-800 border border-yellow-300/30 rounded-xl shadow-lg p-4 backdrop-blur-sm text-sm text-center z-[999999] mb-2">
+                    <button
+                      onClick={() => { setIsProfilePopoverOpen(false); router.push('/auth'); }}
+                      className="w-full px-3 py-2 bg-yellow-300/10 hover:bg-yellow-300/20 rounded text-yellow-300 font-semibold transition-all"
+                    >
+                      Sign In
+                    </button>
+                  </div>
+                )
+              )}
+              onClickOutside={() => setIsProfilePopoverOpen(false)}
+            >
+              <button
+                ref={profileButtonRef}
+                onClick={() => setIsProfilePopoverOpen(!isProfilePopoverOpen)}
+                className="flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-lg transition-all active:bg-yellow-300/10"
+                aria-label="Profile"
+              >
+                {user && user.photoURL ? (
+                  <img src={user.photoURL} alt="avatar" className="w-6 h-6 rounded-full" />
+                ) : (
+                  <UserIcon className="w-6 h-6 text-yellow-300" />
+                )}
+                <span className="text-xs text-yellow-300 font-medium">Profile</span>
+              </button>
+            </PortalPopover>
+          </div>
+        </div>
+
+        <div className="mx-auto max-w-6xl px-3 md:px-4 pb-20 md:pb-4">
           {/* Main Grid Layout (Dynamic) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
             {layoutConfig.map((item) => {
               const spanClass = item.colSpan===3 ? 'md:col-span-3' : item.colSpan===2 ? 'md:col-span-2' : 'md:col-span-1';
               return <div key={item.key} className={spanClass}>
@@ -2264,6 +2385,7 @@ const FitnessDashboard: React.FC = () => {
                 {item.key === 'workoutType' && <WorkoutTypeCard />}
                 {item.key === 'weightProgress' && <WeightProgressCard />}
                 {item.key === 'personalTimeline' && <PersonalTimelineCard />}
+                {item.key === 'rsfOccupancy' && <RSFOccupancyAnalysis />}
                 {item.key === 'progressGoals' && <ProgressGoalsCard />}
                 {item.key === 'friends' && <FriendsCard />}
               </div>

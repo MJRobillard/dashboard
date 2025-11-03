@@ -98,6 +98,24 @@ export const GoogleCalendarViews: React.FC<GoogleCalendarViewsProps> = ({
   const [view, setView] = useState<'big-calendar' | 'personal-grid' | 'google-iframe' | 'timeline'>('timeline');
   const [bigCalendarView, setBigCalendarView] = useState<View>(Views.WEEK);
 
+  // Debug: Log GCal connection and data on mount and when view changes
+  React.useEffect(() => {
+    console.log('[GoogleCalendarViews] isAuthenticated:', isAuthenticated);
+    console.log('[GoogleCalendarViews] selectedCalendar:', selectedCalendar);
+    console.log('[GoogleCalendarViews] googleEvents:', googleEvents);
+    console.log('[GoogleCalendarViews] fetchCalendarEvents:', fetchCalendarEvents);
+  }, []);
+
+  React.useEffect(() => {
+    if (view === 'timeline') {
+      console.log('[GoogleCalendarViews] Timeline view selected. GCal connection:', {
+        isAuthenticated,
+        selectedCalendar,
+        googleEvents,
+      });
+    }
+  }, [view, isAuthenticated, selectedCalendar, googleEvents]);
+
   // Convert all events to big calendar format
   const bigCalendarEvents = useMemo(() => {
     const allEvents = [...personalEvents, ...combinedEvents];

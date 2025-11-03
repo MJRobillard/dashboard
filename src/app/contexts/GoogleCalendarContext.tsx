@@ -138,12 +138,14 @@ export const GoogleCalendarProvider: React.FC<{ children: React.ReactNode }> = (
     const init = async () => {
       setIsLoading(true);
       try {
+        console.log('[GCalProvider:init] Firebase user:', user);
         // 1) Try localStorage first for quick load
         const local = getStoredTokens();
+        console.log('[GCalProvider:init] Tokens from localStorage:', local);
         if (local && local.access_token) {
           setTokens(local);
           setIsAuthenticated(true);
-          
+          console.log('[GCalProvider:init] Found tokens in localStorage, set isAuthenticated true');
           // If we have tokens, try to load calendars and events
           await loadCalendarsAndEvents(local);
           return;
@@ -152,17 +154,18 @@ export const GoogleCalendarProvider: React.FC<{ children: React.ReactNode }> = (
         // 2) If user logged in, attempt Firestore
         if (user) {
           const cloudData = await loadUserGCalData(user.uid);
+          console.log('[GCalProvider:init] Tokens from Firestore:', cloudData);
           if (cloudData && cloudData.tokens && cloudData.tokens.access_token) {
             setTokens(cloudData.tokens);
             setIsAuthenticated(true);
             storeTokens(cloudData.tokens); // cache locally for faster subsequent loads
+            console.log('[GCalProvider:init] Found tokens in Firestore, set isAuthenticated true');
 
             if (cloudData.calendars) setCalendars(cloudData.calendars);
             if (cloudData.selectedCalendarId) {
               const found = cloudData.calendars?.find(c=>c.id===cloudData.selectedCalendarId) || null;
               if (found) setSelectedCalendar(found);
             }
-            
             // Load events if we have a selected calendar
             if (cloudData.selectedCalendarId && cloudData.calendars) {
               const found = cloudData.calendars.find(c=>c.id===cloudData.selectedCalendarId);
@@ -172,10 +175,14 @@ export const GoogleCalendarProvider: React.FC<{ children: React.ReactNode }> = (
                 // Events will be fetched by the useEffect that watches selectedCalendar
               }
             }
+          } else {
+            console.log('[GCalProvider:init] No valid tokens in Firestore for user');
           }
+        } else {
+          console.log('[GCalProvider:init] No Firebase user, skipping Firestore check');
         }
       } catch (error) {
-        console.error('Error initializing Google Calendar:', error);
+        console.error('[GCalProvider:init] Error initializing Google Calendar:', error);
         // If there's an error, clear the stored tokens and try to refresh
         if (tokens?.refresh_token) {
           await refreshTokens();
