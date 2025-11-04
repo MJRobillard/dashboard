@@ -103,12 +103,15 @@ export const RSFOccupancyAnalysis: React.FC = () => {
   }
 
   // Prepare heatmap data
+  const heatmapColorscale = 'Cividis' as const; // Plotly built-in
+  
+
   const heatmapData = [{
     z: data.heatmap.values,
     x: data.heatmap.times,
     y: data.heatmap.weekdays,
     type: 'heatmap' as const,
-    colorscale: 'YlGnBu',
+    colorscale: heatmapColorscale,
     zmin: 0,
     zmax: heatmapZMax,
     hovertemplate: 'Weekday: %{y}<br>Time: %{x}<br>% Filled: %{z:.1f}%<extra></extra>',

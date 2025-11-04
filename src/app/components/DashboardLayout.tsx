@@ -30,7 +30,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ layout, registry, car
             ? 'md:col-span-2'
             : 'md:col-span-1';
         return (
-          <div key={item.key} className={spanClass}>
+          <div key={item.key} id={`card-${item.key}`} className={spanClass}>
             <Card {...(cardProps[item.key] || {})} />
           </div>
         );

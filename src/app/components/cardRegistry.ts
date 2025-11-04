@@ -5,6 +5,7 @@ import CrowdMeterCard from './CrowdMeterCard';
 import RsfScheduleCard from './RsfScheduleCard';
 import WeightProgressCard from './WeightProgressCard';
 import PersonalTimelineCard from './PersonalTimelineCard';
+import { RSFOccupancyAnalysis } from './RSFOccupancyAnalysis';
 
 export const cardRegistry = {
   rsfSchedule: RsfScheduleCard,
@@ -16,5 +17,6 @@ export const cardRegistry = {
   friends: FriendsCard,
   weightProgress: WeightProgressCard,
   personalTimeline: PersonalTimelineCard,
+  rsfAnalysis: RSFOccupancyAnalysis,
   // Add more as you modularize them
 }; 

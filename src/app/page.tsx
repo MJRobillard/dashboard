@@ -47,6 +47,7 @@ import FriendsCard from './components/FriendsCard';
 import CrowdMeterCard from './components/CrowdMeterCard';
 import RsfScheduleCard from './components/RsfScheduleCard';
 import DashboardLayout from './components/DashboardLayout';
+import MobileBottomNav from './components/MobileBottomNav';
 import { cardRegistry } from './components/cardRegistry';
 import { fitnessDashboardLayout } from './dashboardConfigs/fitness';
 
@@ -1727,8 +1728,8 @@ const FitnessDashboard: React.FC = () => {
             </div>
           </div>
         </div>
-        {/* Sticky Action Buttons */}
-        <div className="sticky top-0 z-40 flex justify-center sm:justify-end w-full px-2 sm:px-6 pt-2 pointer-events-none">
+        {/* Sticky Action Buttons (hidden on mobile) */}
+        <div className="sticky top-0 z-40 hidden sm:flex justify-end w-full px-2 sm:px-6 pt-2 pointer-events-none">
           <div className="flex flex-row items-center gap-2 sm:gap-4 bg-[#000000]/80 border border-yellow-300/30 rounded-full shadow-lg px-2 py-1 sm:px-4 sm:py-2 backdrop-blur-md pointer-events-auto">
             <PortalPopover
               isOpen={isFriendsPopoverOpen}
@@ -1835,7 +1836,7 @@ const FitnessDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="mx-auto max-w-6xl px-4">
+        <div className="mx-auto max-w-6xl px-4 pb-24 sm:pb-0">
           {/* Main Grid Layout (Dynamic) */}
           <DashboardLayout layout={layoutConfig} registry={cardRegistry} cardProps={cardProps} />
           {/* Stats Grid */}
@@ -2081,6 +2082,8 @@ const FitnessDashboard: React.FC = () => {
             </div>
           </div>
         )}
+        {/* Mobile Bottom Navigation */}
+        <MobileBottomNav />
       </div>
     </DndProvider>
   );
