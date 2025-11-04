@@ -59,6 +59,8 @@ The Cal Fitness Student Dashboard is a Next.js-based web application that serves
 ### Data Visualization
 - **Chart.js 4.4.9**: Interactive charts and graphs
 - **React Chart.js 2**: React wrapper for Chart.js
+- **Plotly.js 3.x**: Advanced, interactive analytics (heatmaps, timelines)
+- **React Plotly.js**: Plotly React bindings used in `RSFOccupancyAnalysis`
 - **Line & Doughnut Charts**: Progress tracking and analytics visualization
 
 ### Interactive Components
@@ -105,9 +107,19 @@ The Cal Fitness Student Dashboard is a Next.js-based web application that serves
 3. **Set up environment variables**
    Create a `.env.local` file with:
    ```env
-   GOOGLE_CLIENT_ID=your_google_client_id
-   GOOGLE_CLIENT_SECRET=your_google_client_secret
-   NEXTAUTH_SECRET=your_nextauth_secret
+   # Google OAuth (client + server)
+   NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_oauth_client_id
+   GOOGLE_CLIENT_SECRET=your_oauth_client_secret
+   # Optional (production override)
+   # GOOGLE_REDIRECT_URI=https://your-domain.com/google-callback
+
+   # Firebase (client-side SDK)
+   NEXT_PUBLIC_FIREBASE_API_KEY=xxx
+   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=xxx.firebaseapp.com
+   NEXT_PUBLIC_FIREBASE_PROJECT_ID=xxx
+   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=xxx.appspot.com
+   NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=xxx
+   NEXT_PUBLIC_FIREBASE_APP_ID=1:xxx:web:xxx
    ```
 
 4. **Run the development server**
@@ -123,6 +135,14 @@ The Cal Fitness Student Dashboard is a Next.js-based web application that serves
 
 5. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000) to see the application
+
+### RSF Occupancy Data (for analytics)
+
+The RSF occupancy analytics rely on a CSV file located at `RSF_Analysis/scraped_data2.csv`.
+
+- Ensure the file exists at that exact path before using the RSF analytics card.
+- You can generate/update this file using the utilities in the `RSF_Analysis` folder (e.g., notebooks or scripts).
+- The API `GET /api/rsf-occupancy` processes this CSV to power the dashboard visualizations.
 
 ## Project Structure
 
@@ -165,14 +185,34 @@ npm run start    # Start production server (port 3001)
 npm run lint     # Run ESLint for code quality
 ```
 
-## Analytics & Monitoring
+## API Routes
 
-This project includes [Vercel Analytics](https://vercel.com/analytics) for comprehensive tracking:
+These server routes back the Google Calendar integration and RSF analytics.
 
-- **Page Views**: Track user navigation patterns
-- **Performance Metrics**: Monitor Core Web Vitals
-- **User Interactions**: Analyze feature usage and engagement
-- **Real-time Dashboard**: Live analytics in Vercel dashboard
+- `POST /api/google-calendar/auth`
+  - Body: `{ code?: string, accessToken?: string }`
+  - If `code` is provided, exchanges it for tokens and returns calendars.
+  - If `accessToken` is provided (no `code`), returns the user's calendars.
+
+- `GET /api/google-calendar/auth?accessToken=...&calendarId=...`
+  - Returns events for the specified calendar.
+
+- `POST /api/google-calendar/create-event`
+  - Body: `{ accessToken, calendarId, summary, description?, startDateTime, endDateTime, location? }`
+  - Creates a calendar event (timezone: America/Los_Angeles by default).
+
+- `POST /api/google-calendar/refresh`
+  - Body: `{ refreshToken }`
+  - Returns a refreshed access token.
+
+- `GET /api/rsf-occupancy`
+  - Processes `RSF_Analysis/scraped_data2.csv` and returns heatmap/timeline data.
+
+## Documentation
+
+- Google Calendar setup: `GOOGLE_CALENDAR_SETUP.md`
+- Google Calendar integration details: `GOOGLE_CALENDAR_INTEGRATION.md`
+- Google Calendar UI components: `GOOGLE_CALENDAR_COMPONENTS.md`
 
 ## Deployment
 
@@ -221,4 +261,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Built with ❤️ for the UC Berkeley fitness community* 
