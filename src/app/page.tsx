@@ -613,6 +613,28 @@ const FitnessDashboard: React.FC = () => {
     hasLoadedUserData.current = false;
   }, [user?.uid]);
 
+  // Scroll to section when URL has a hash (e.g., #card-rsfSchedule)
+  useEffect(() => {
+    const scrollToHash = () => {
+      if (typeof window === 'undefined') return;
+      const hash = window.location.hash;
+      if (!hash) return;
+      const id = decodeURIComponent(hash.replace(/^#/, ''));
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+
+    const timeout = window.setTimeout(scrollToHash, 0);
+    window.addEventListener('hashchange', scrollToHash);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('hashchange', scrollToHash);
+    };
+  }, []);
+
   // --- Grouped Data and Handlers for Cards ---
   // Achievements data and handler
   const achievements: Achievement[] = [
