@@ -92,7 +92,6 @@ export const GoogleCalendarViews: React.FC<GoogleCalendarViewsProps> = ({
     isAuthenticated, 
     selectedCalendar, 
     googleEvents,
-    createEvent: createGCalEvent,
     fetchCalendarEvents
   } = useGoogleCalendar();
   const [view, setView] = useState<'big-calendar' | 'personal-grid' | 'google-iframe' | 'timeline'>('timeline');

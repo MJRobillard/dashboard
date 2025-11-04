@@ -6,8 +6,7 @@ const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 // Scopes for Google Calendar access
 export const GOOGLE_CALENDAR_SCOPES = [
-  'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/calendar.events'
+  'https://www.googleapis.com/auth/calendar.readonly'
 ];
 
 // Get dynamic redirect URI based on environment
